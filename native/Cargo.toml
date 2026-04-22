@@ -1,0 +1,42 @@
+[package]
+name = "win_cu_native"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "win_cu_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "2", features = ["async", "tokio_rt"] }
+napi-derive = "2"
+tokio = { version = "1", features = ["full"] }
+enigo = "0.4"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+win-hotkeys = "0.2"
+arboard = "3.4"
+winreg = "0.52"
+base64 = "0.22"
+lazy_static = "1.4.0"
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_System_Registry",
+    "Win32_System_Console",
+    "Win32_UI_Shell",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_Com",
+    "Win32_UI_HiDpi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_System_LibraryLoader",
+] }
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1

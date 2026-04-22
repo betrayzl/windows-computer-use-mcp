@@ -1,0 +1,146 @@
+Windows Computer Use MCP 项目总体总结
+一、项目起源与目标
+项目名称：Windows Computer Use MCP 服务器
+
+核心目标：为 AI 智能体（如 Claude Code、OpenClaw）提供一套可靠、精准、高性能的 Windows 桌面操控能力，使其能够像人类一样“观察屏幕、操控键鼠、管理窗口”，从而完成任意复杂的自动化任务。
+
+最终形态：一个通过 MCP（Model Context Protocol）协议与智能体通信的独立系统应用（.exe），无需依赖特定客户端环境，安装后即可为任何兼容 MCP 的智能体提供“眼睛”和“手”。
+
+预期工作流（用户所述闭环逻辑）：
+
+智能体接收用户指令（如“打开小红书搜索热点并发布”）。
+
+智能体拆解任务，循环执行：
+
+调用 screenshot 获取当前屏幕图像。
+
+分析图像，定位目标元素（图标、按钮、输入框）的坐标。
+
+调用 move_mouse、click、type 等工具执行操作。
+
+再次截图确认操作结果，进入下一轮。
+
+执行层（本项目）负责所有底层能力的稳定实现，确保智能体的每一个原子指令都能在复杂的 Windows 桌面环境中可靠生效。
+
+二、技术架构全景
+项目采用分层架构，自底向上分为三层：
+
+层级	技术栈	职责
+原生硬件交互层	Rust + Windows API (DXGI, User32, GDI, enigo)	高性能屏幕截图、键鼠模拟、窗口管理、DPI 感知、全局热键。
+跨语言桥接层	NAPI-RS	将 Rust 结构体和方法导出为 Node.js 原生模块（.node），实现 TypeScript 与 Rust 的无缝调用。
+MCP 服务与编排层	TypeScript + Node.js + MCP SDK	实现 MCP 协议服务器，将底层能力封装为标准工具（screenshot、click、type 等），处理坐标转换、DPI 缩放、异常恢复。
+最终交付物：通过 @vercel/ncc 打包的单一 .js 文件 + 编译后的 .node 二进制模块，用户无需安装 Rust 或 Node.js 环境即可运行。
+
+三、核心功能模块清单
+工具名称	功能描述	状态
+get_display_size	获取主显示器物理分辨率与 DPI 缩放比例	✅ 已完成
+get_monitors	获取所有显示器的物理矩形区域和独立 DPI（支持多屏混合）	✅ 已完成（诊断模式）
+screenshot	捕获屏幕（支持排除指定进程窗口），返回 JPEG Base64	✅ 已完成
+move_mouse	移动鼠标到指定逻辑坐标（自动处理多屏偏移和 DPI）	✅ 已完成
+click	鼠标点击（左/右/中键，支持多次）	✅ 已完成
+drag	鼠标拖拽	✅ 已完成
+scroll	鼠标滚轮	⚠️ 基础实现
+type	模拟键盘输入文本	✅ 已完成
+key	发送组合键（如 ctrl+s）	✅ 已完成
+open_app	启动应用程序	✅ 已完成
+focus_app	强制激活指定进程窗口（突破 Windows 焦点保护）	🚧 攻坚中
+hide_windows / unhide_windows	隐藏/恢复指定进程窗口	✅ 已完成
+get_frontmost_app	获取当前前台窗口信息	✅ 已完成
+list_installed_apps	枚举已安装应用	✅ 已完成
+read_clipboard / write_clipboard	剪贴板读写	✅ 已完成
+四、关键攻坚历程与已解决的核心问题
+1. 编译与构建链路打通
+问题：NAPI-RS 与 TypeScript 的模块系统（ESM）存在命名导出、类型导入、打包后路径解析等一系列兼容性问题。
+
+解决：通过精确配置 tsconfig.json（verbatimModuleSyntax、module: NodeNext）、统一使用 createRequire 加载 .node 文件、以及设计稳健的 native-loader.ts，实现了从 Rust 编译到 NCC 单文件打包的全自动构建流水线。
+
+2. 截图功能从 Mock 到工业级 DXGI 实现
+问题：初期使用占位代码，返回空数据；DXGI API 调用复杂，涉及 D3D11CreateDevice、AcquireNextFrame、纹理映射、BGRA→RGBA 转换等。
+
+解决：完整实现了基于 IDXGIOutputDuplication 的桌面复制，配合 RAII 守卫确保帧资源释放，并通过 napi::Task 将耗时操作移出 Node.js 主线程，解决了超时问题。截图性能达到 50-80ms/帧（2K 分辨率）。
+
+3. 多屏混合 DPI 环境下的精准坐标转换
+问题：用户环境为主屏 2K (125% DPI) + 副屏 1K (100% DPI)，简单的 physical = logical * scale 导致鼠标在副屏完全失效，点击偏移巨大。
+
+解决：通过 EnumDisplayMonitors 和 GetDpiForMonitor 获取每个显示器的虚拟桌面矩形（left, top, right, bottom）及独立 scaleFactor，在 TypeScript 层实现了 MonitorInfo 缓存和动态坐标转换算法 physicalX = monitor.left + logicalX * monitor.scaleFactor。这是本项目区别于普通键鼠脚本的核心竞争力。
+
+4. 窗口管理可靠性与阻塞风险消除
+问题：hide_windows 在 EnumWindows 回调中调用 OpenProcess 导致阻塞；capture_excluding 因窗口恢复失败导致死锁。
+
+解决：将进程名查询移出回调，采用“先收集再匹配”模式；引入 RAII 守卫 WindowRestoreGuard 确保窗口必定恢复；将 unhide_windows 中的 SW_SHOW 改为 SW_RESTORE 以正确恢复最小化窗口。
+
+5. 测试驱动与脚本演进
+问题：简单的 test_driver.js 无法处理大体积截图的分包传输，导致超时；固定延时无法适应窗口启动速度。
+
+解决：重构 callTool 的流式 JSON 解析（缓冲区累积）；引入 pollForApp 轮询机制，使脚本具备“状态感知”能力；最终形成 test_workflow.js，支持定义复杂动作链。
+
+五、当前状态与最后一道技术关卡
+✅ 已完成并可稳定工作的部分
+多屏混合 DPI 坐标系统。
+
+高速 DXGI 截图。
+
+键鼠模拟基础能力。
+
+窗口隐藏/恢复。
+
+完整的 MCP 工具链和自动化构建。
+
+🚧 当前攻坚焦点：窗口焦点强制激活（Foreground Enforcement）
+现象：
+
+open_app 启动应用后，窗口常被其他窗口（如终端）遮挡，或仅在任务栏闪烁。
+
+后续的 type 指令将按键发送到遮挡窗口，导致自动化流程在“物理上无效”。
+
+根源：
+
+Windows 的焦点窃取防护机制会静默拦截非活动进程的 SetForegroundWindow 调用。
+
+解决方案（进行中）：
+
+在 Rust 层实现组合激活序列：
+
+ShowWindow(hwnd, SW_RESTORE) 恢复窗口。
+AttachThreadInput 将目标线程与当前前台线程的输入队列临时挂接。
+SetForegroundWindow + BringWindowToTop + SetFocus 强制激活。
+返回激活是否成功的布尔状态。
+在 TypeScript 层，所有需要焦点的操作（type、click）前增加 ensureForeground 防御性校验与重试。
+
+预期效果：无论桌面环境如何混乱，目标窗口都能被可靠拉至前台并获得输入焦点，确保智能体的每一步操作都能精准送达。
+
+六、项目路线图与未来演进
+第一阶段（当前）：执行层可靠性攻坚
+P0：彻底解决窗口焦点激活问题（AttachThreadInput 方案）。
+
+P0：在 executor.ts 中集成焦点确保机制。
+
+第二阶段：感知层增强
+封装 Windows UI Automation (UIA) API，提供 get_ui_element_info 工具，返回控件类型、名称、边界矩形。
+
+实现截图自动叠加坐标网格或 UI 元素标注，降低智能体视觉推理难度。
+
+支持局部截图（指定区域），减少传输数据量。
+
+第三阶段：智能体深度集成
+优化 MCP 工具描述，使其更符合智能体的语义理解习惯。
+
+提供任务编排示例（如“打开浏览器搜索并保存截图”）。
+
+探索将多模态模型直接集成到 MCP 服务器内部，形成一体化 Agent。
+
+第四阶段：产品化与分发
+使用 Tauri 或纯打包方案，将项目封装为带系统托盘的独立 Windows 应用。
+
+提供一键安装包，自动注册到系统 PATH。
+
+支持开机自启、权限自动申请。
+
+七、结语
+本项目已从一个技术验证原型，成长为具备工业级潜力的 Windows 桌面自动化引擎。我们攻克了多屏 DPI、高性能截图、跨语言构建等一系列工程难题，目前正站在“可靠执行”的最后一道门槛前。
+
+一旦焦点激活问题被彻底解决，这套系统将能够为上层智能体提供一个稳定、精准、可自愈的物理世界交互界面，真正实现“AI 像人一样操作电脑”的愿景。
+
+项目当前分支：main
+最后更新：2026-04-21
+核心贡献者：用户 & Claude Code (AI Assistant)
