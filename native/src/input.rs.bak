@@ -115,24 +115,11 @@ impl InputController {
                 .map_err(|e| Error::from_reason(e.to_string()))?;
         }
 
-        // 重要：给操作系统一点时间注册修饰键状态
-        std::thread::sleep(std::time::Duration::from_millis(10));
-
-        // 2. 按下主键
-        self.enigo.key(main_key, enigo::Direction::Press)
+        // 2. 点击主键
+        self.enigo.key(main_key, enigo::Direction::Click)
             .map_err(|e| Error::from_reason(e.to_string()))?;
 
-        // 3. 保持短暂时间（让组合键生效）
-        std::thread::sleep(std::time::Duration::from_millis(50));
-
-        // 4. 释放主键
-        self.enigo.key(main_key, enigo::Direction::Release)
-            .map_err(|e| Error::from_reason(e.to_string()))?;
-
-        // 5. 再等一小段时间
-        std::thread::sleep(std::time::Duration::from_millis(10));
-
-        // 6. 释放所有修饰键（逆序）
+        // 3. 释放修饰键（逆序释放）
         for &mod_key in modifiers.iter().rev() {
             self.enigo.key(mod_key, enigo::Direction::Release)
                 .map_err(|e| Error::from_reason(e.to_string()))?;
@@ -162,13 +149,22 @@ fn map_single_key(key: &str) -> Result<enigo::Key> {
         "f4" => Ok(Key::F4), "f5" => Ok(Key::F5), "f6" => Ok(Key::F6),
         "f7" => Ok(Key::F7), "f8" => Ok(Key::F8), "f9" => Ok(Key::F9),
         "f10" => Ok(Key::F10), "f11" => Ok(Key::F11), "f12" => Ok(Key::F12),
-        "a" => Ok(Key::A), "b" => Ok(Key::B), "c" => Ok(Key::C), "d" => Ok(Key::D),
-        "e" => Ok(Key::E), "f" => Ok(Key::F), "g" => Ok(Key::G), "h" => Ok(Key::H),
-        "i" => Ok(Key::I), "j" => Ok(Key::J), "k" => Ok(Key::K), "l" => Ok(Key::L),
-        "m" => Ok(Key::M), "n" => Ok(Key::N), "o" => Ok(Key::O), "p" => Ok(Key::P),
-        "q" => Ok(Key::Q), "r" => Ok(Key::R), "s" => Ok(Key::S), "t" => Ok(Key::T),
-        "u" => Ok(Key::U), "v" => Ok(Key::V), "w" => Ok(Key::W), "x" => Ok(Key::X),
-        "y" => Ok(Key::Y), "z" => Ok(Key::Z),
+        // 字母键处理
+        s if s.len() == 1 && s.chars().next().unwrap().is_alphabetic() => {
+            let c = s.chars().next().unwrap().to_ascii_uppercase();
+            match c {
+                'A' => Ok(Key::A), 'B' => Ok(Key::B), 'C' => Ok(Key::C),
+                'D' => Ok(Key::D), 'E' => Ok(Key::E), 'F' => Ok(Key::F),
+                'G' => Ok(Key::G), 'H' => Ok(Key::H), 'I' => Ok(Key::I),
+                'J' => Ok(Key::J), 'K' => Ok(Key::K), 'L' => Ok(Key::L),
+                'M' => Ok(Key::M), 'N' => Ok(Key::N), 'O' => Ok(Key::O),
+                'P' => Ok(Key::P), 'Q' => Ok(Key::Q), 'R' => Ok(Key::R),
+                'S' => Ok(Key::S), 'T' => Ok(Key::T), 'U' => Ok(Key::U),
+                'V' => Ok(Key::V), 'W' => Ok(Key::W), 'X' => Ok(Key::X),
+                'Y' => Ok(Key::Y), 'Z' => Ok(Key::Z),
+                _ => Err(Error::from_reason(format!("Unsupported letter: {}", s))),
+            }
+        }
         _ => Err(Error::from_reason(format!("Unsupported key: {}", key))),
     }
 }
