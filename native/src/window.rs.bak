@@ -163,7 +163,7 @@ impl WindowManager {
         }
     }
 
-    // ========== 终极焦点夺取（包含 Level 4 Alt+Tab 模拟） ==========
+    // ========== 核心焦点激活（精简可靠版） ==========
     #[napi]
     pub fn focus_window(&self, process_name: String) -> Result<bool> {
         let mut target_hwnd: Option<HWND> = None;
@@ -176,7 +176,7 @@ impl WindowManager {
 
         if let Some(hwnd) = target_hwnd {
             unsafe {
-                // 恢复窗口
+                // 恢复最小化
                 if IsIconic(hwnd).as_bool() {
                     let _ = ShowWindow(hwnd, SW_RESTORE);
                 }
@@ -211,25 +211,11 @@ impl WindowManager {
                     }
                 }
 
-                // Level 3: 消息轰炸
-                let _ = PostMessageW(Some(hwnd), WM_ACTIVATE, WPARAM(WA_ACTIVE as usize), LPARAM(0));
-                let _ = PostMessageW(Some(hwnd), WM_SETFOCUS, WPARAM(0), LPARAM(0));
-                let _ = SendMessageW(hwnd, WM_ACTIVATE, Some(WPARAM(WA_ACTIVE as usize)), Some(LPARAM(0)));
-                let _ = SendMessageW(hwnd, WM_SETFOCUS, Some(WPARAM(0)), Some(LPARAM(0)));
-                thread::sleep(Duration::from_millis(100));
-                let _ = SetForegroundWindow(hwnd);
-                let _ = BringWindowToTop(hwnd);
-                thread::sleep(Duration::from_millis(200));
-                if GetForegroundWindow() == hwnd {
-                    return Ok(true);
-                }
-
-                // Level 4: 物理 Alt+Tab 模拟（终极手段）
+                // Level 3: 物理 Alt+Tab 模拟
                 println!("[WARN] Falling back to physical Alt+Tab simulation for {:?}", hwnd);
                 simulate_alt_tab();
                 thread::sleep(Duration::from_millis(300));
 
-                // 最终验证
                 Ok(GetForegroundWindow() == hwnd)
             }
         } else {
@@ -240,8 +226,7 @@ impl WindowManager {
 
 // ========== Alt+Tab 模拟实现 ==========
 unsafe fn simulate_alt_tab() {
-    // 按下 Alt 键
-    let mut inputs: [INPUT; 4] = [
+    let inputs: [INPUT; 4] = [
         // Alt down
         INPUT {
             r#type: INPUT_KEYBOARD,
@@ -275,7 +260,7 @@ unsafe fn simulate_alt_tab() {
                 ki: KEYBDINPUT {
                     wVk: VIRTUAL_KEY(VK_TAB.0 as u16),
                     wScan: 0,
-                    dwFlags: KEYEVENTF_KEYUP,
+                    dwFlags: KEYBD_EVENT_FLAGS(KEYEVENTF_KEYUP.0 as u32),
                     time: 0,
                     dwExtraInfo: 0,
                 },
@@ -288,7 +273,7 @@ unsafe fn simulate_alt_tab() {
                 ki: KEYBDINPUT {
                     wVk: VIRTUAL_KEY(VK_MENU.0 as u16),
                     wScan: 0,
-                    dwFlags: KEYEVENTF_KEYUP,
+                    dwFlags: KEYBD_EVENT_FLAGS(KEYEVENTF_KEYUP.0 as u32),
                     time: 0,
                     dwExtraInfo: 0,
                 },
@@ -296,7 +281,6 @@ unsafe fn simulate_alt_tab() {
         },
     ];
 
-    // 发送按键序列，每次间隔 50ms
     for input in inputs.iter() {
         SendInput(&[*input], std::mem::size_of::<INPUT>() as i32);
         thread::sleep(Duration::from_millis(50));

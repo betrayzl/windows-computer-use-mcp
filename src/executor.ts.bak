@@ -101,6 +101,8 @@ export class WindowsComputerExecutor implements ComputerExecutor {
       // 2. 轮询验证
       const frontmost = await this.getFrontmostApp();
       if (frontmost && frontmost.displayName.toLowerCase().includes(processName.toLowerCase())) {
+        // 额外等待输入状态稳定
+        await new Promise(r => setTimeout(r, 200));
         console.log(`[DEBUG] ensureForeground: ${processName} is now frontmost.`);
         return true;
       }
@@ -209,7 +211,7 @@ export class WindowsComputerExecutor implements ComputerExecutor {
   }
 
   async unhideWindows(handles: number[]): Promise<void> {
-    await this.windowManager.unhideWindows(handles);
+    return await this.windowManager.unhideWindows(handles);
   }
 
   async listInstalledApps(): Promise<InstalledApp[]> {

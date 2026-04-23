@@ -163,7 +163,6 @@ impl WindowManager {
         }
     }
 
-    // ========== 核心焦点激活（精简可靠版） ==========
     #[napi]
     pub fn focus_window(&self, process_name: String) -> Result<bool> {
         let mut target_hwnd: Option<HWND> = None;
@@ -176,14 +175,12 @@ impl WindowManager {
 
         if let Some(hwnd) = target_hwnd {
             unsafe {
-                // 恢复最小化
                 if IsIconic(hwnd).as_bool() {
                     let _ = ShowWindow(hwnd, SW_RESTORE);
                 }
                 let _ = ShowWindow(hwnd, SW_SHOW);
                 thread::sleep(Duration::from_millis(80));
 
-                // Level 1: 标准激活
                 let _ = SetForegroundWindow(hwnd);
                 let _ = BringWindowToTop(hwnd);
                 thread::sleep(Duration::from_millis(150));
@@ -191,7 +188,6 @@ impl WindowManager {
                     return Ok(true);
                 }
 
-                // Level 2: AttachThreadInput
                 let current_thread_id = GetCurrentThreadId();
                 let mut target_thread_id = 0u32;
                 GetWindowThreadProcessId(hwnd, Some(&mut target_thread_id));
@@ -211,7 +207,6 @@ impl WindowManager {
                     }
                 }
 
-                // Level 3: 物理 Alt+Tab 模拟
                 println!("[WARN] Falling back to physical Alt+Tab simulation for {:?}", hwnd);
                 simulate_alt_tab();
                 thread::sleep(Duration::from_millis(300));
@@ -222,12 +217,53 @@ impl WindowManager {
             Ok(false)
         }
     }
-}
 
-// ========== Alt+Tab 模拟实现 ==========
+    #[napi]
+    pub fn is_process_running(&self, process_name: String) -> bool {
+        let lower_target = process_name.to_lowercase();
+        let mut found = false;
+
+        unsafe {
+            struct SearchContext<'a> {
+                target: &'a str,
+                found: &'a mut bool,
+            }
+
+            extern "system" fn search_proc(hwnd: HWND, lparam: LPARAM) -> windows::core::BOOL {
+                let context = unsafe { &mut *(lparam.0 as *mut SearchContext) };
+
+                let visible = unsafe { IsWindowVisible(hwnd).as_bool() };
+                if visible {
+                    let mut pid = 0u32;
+                    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+                    if pid != 0 {
+                        let name = unsafe { get_process_name(pid) };
+                        if let Some(name) = name {
+                            if name.to_lowercase().contains(context.target) {
+                                *context.found = true;
+                                return windows::core::BOOL(0);
+                            }
+                        }
+                    }
+                }
+                windows::core::BOOL(1)
+            }
+
+            let mut context = SearchContext {
+                target: &lower_target,
+                found: &mut found,
+            };
+
+            let _ = EnumWindows(Some(search_proc), LPARAM(&mut context as *mut _ as isize));
+        }
+
+        found
+    }
+} // ← 这个括号关闭了 impl WindowManager，之前可能被丢失
+
+// Alt+Tab 模拟
 unsafe fn simulate_alt_tab() {
     let inputs: [INPUT; 4] = [
-        // Alt down
         INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
@@ -240,7 +276,6 @@ unsafe fn simulate_alt_tab() {
                 },
             },
         },
-        // Tab down
         INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
@@ -253,7 +288,6 @@ unsafe fn simulate_alt_tab() {
                 },
             },
         },
-        // Tab up
         INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
@@ -266,7 +300,6 @@ unsafe fn simulate_alt_tab() {
                 },
             },
         },
-        // Alt up
         INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
@@ -286,8 +319,6 @@ unsafe fn simulate_alt_tab() {
         thread::sleep(Duration::from_millis(50));
     }
 }
-
-// ========== 回调与工具函数 ==========
 
 unsafe extern "system" fn monitor_enum_proc(
     hmon: HMONITOR,
