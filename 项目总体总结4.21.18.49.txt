@@ -87,28 +87,6 @@ read_clipboard / write_clipboard	剪贴板读写	✅ 已完成
 完整的 MCP 工具链和自动化构建。
 
 🚧 当前攻坚焦点：窗口焦点强制激活（Foreground Enforcement）
-现象：
-
-open_app 启动应用后，窗口常被其他窗口（如终端）遮挡，或仅在任务栏闪烁。
-
-后续的 type 指令将按键发送到遮挡窗口，导致自动化流程在“物理上无效”。
-
-根源：
-
-Windows 的焦点窃取防护机制会静默拦截非活动进程的 SetForegroundWindow 调用。
-
-解决方案（进行中）：
-
-在 Rust 层实现组合激活序列：
-
-ShowWindow(hwnd, SW_RESTORE) 恢复窗口。
-AttachThreadInput 将目标线程与当前前台线程的输入队列临时挂接。
-SetForegroundWindow + BringWindowToTop + SetFocus 强制激活。
-返回激活是否成功的布尔状态。
-在 TypeScript 层，所有需要焦点的操作（type、click）前增加 ensureForeground 防御性校验与重试。
-
-预期效果：无论桌面环境如何混乱，目标窗口都能被可靠拉至前台并获得输入焦点，确保智能体的每一步操作都能精准送达。
-
 六、项目路线图与未来演进
 第一阶段（当前）：执行层可靠性攻坚
 P0：彻底解决窗口焦点激活问题（AttachThreadInput 方案）。
