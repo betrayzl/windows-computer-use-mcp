@@ -7558,11 +7558,11 @@ const TOOLS = [
     },
     {
         name: 'key',
-        description: 'Press and release a key or key combination.',
+        description: 'Press a key or key combination. Supports single keys (e.g., "escape", "enter") and combinations separated by "+" (e.g., "alt+f4", "ctrl+c", "ctrl+shift+escape").',
         inputSchema: {
             type: 'object',
             properties: {
-                sequence: { type: 'string', description: 'The key to press (e.g., "escape", "enter", "a").' },
+                sequence: { type: 'string', description: 'The key or key combination to press. Use "+" between keys for combinations.' },
             },
             required: ['sequence'],
         },
