@@ -11,11 +11,6 @@ export declare class WindowsComputerExecutor implements ComputerExecutor {
     screenshot(opts: {
         excludeProcessNames?: string[];
     }): Promise<ScreenshotResult>;
-    /**
-     * 核心防御性方法：确保指定进程的窗口处于前台
-     * @param processName 目标进程名
-     * @returns 是否成功获得焦点
-     */
     private ensureForeground;
     moveMouse(x: number, y: number): Promise<void>;
     click(x: number, y: number, button: 'left' | 'right' | 'middle', count?: number, processName?: string): Promise<void>;
