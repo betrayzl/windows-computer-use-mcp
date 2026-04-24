@@ -236,6 +236,11 @@ const TOOLS: any[] = [
     },
   },
   {
+    name: 'describe_screen',
+    description: `[LOWEST COST ~1000 tokens] Returns a complete text description of the current screen state: foreground app, display geometry, and all visible UI elements with positions and labels. Use this FIRST before any operation — it replaces the need for a screenshot in most cases.`,
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
     name: 'get_ui_elements',
     description: `[LOW COST ~500 tokens] Returns structured UI element tree of the currently focused window. Each element includes name, control type, bounding rectangle, enabled/visible state. Prefer this over screenshot for understanding what's on screen.`,
     inputSchema: { type: 'object', properties: {} },
@@ -356,6 +361,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { text } = assertArgs<{ text: string }>(args, name);
         await executor.writeClipboard(text);
         result = { success: true };
+        break;
+      }
+      case 'describe_screen': {
+        result = { description: await executor.describeScreen() };
         break;
       }
       case 'get_window_rect': {

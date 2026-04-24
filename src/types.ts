@@ -44,6 +44,7 @@ export interface ComputerExecutor {
   getUiElements(): Promise<UiElementInfo[]>;
   captureRegion(x: number, y: number, width: number, height: number, quality: number, maxWidth: number, maxHeight: number): Promise<string>;
   getWindowRect(processName: string): Promise<WindowRect | null>;
+  describeScreen(): Promise<string>;
 }
 
 export interface UiElementInfo {
