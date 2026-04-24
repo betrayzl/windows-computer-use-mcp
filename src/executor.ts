@@ -253,6 +253,39 @@ export class WindowsComputerExecutor implements ComputerExecutor {
     return await this.windowManager.getWindowRect(processName);
   }
 
+  async describeScreen(): Promise<string> {
+    const [foreground, display, elements] = await Promise.all([
+      this.getFrontmostApp().catch(() => null),
+      this.getDisplaySize().catch(() => null),
+      this.getUiElements().catch(() => [] as UiElementInfo[]),
+    ]);
+
+    const lines: string[] = [];
+    lines.push(`Display: ${display?.width ?? '?'}x${display?.height ?? '?'} @${display?.scaleFactor ?? 1}x scale`);
+    lines.push(`Foreground: ${foreground?.displayName ?? 'unknown'} (${foreground?.bundleId ?? '?'})`);
+
+    // Filter visible, sizable elements at reasonable depth
+    const visible = elements.filter(e =>
+      e.visible && e.width > 10 && e.height > 10 && e.depth <= 3
+    );
+
+    // Sort top-to-bottom, left-to-right
+    visible.sort((a, b) => a.y - b.y || a.x - b.x);
+
+    if (visible.length > 0) {
+      lines.push('', `UI Elements (${visible.length} visible):`);
+      for (const el of visible) {
+        const label = el.name ? ` "${el.name.slice(0, 80)}"` : '';
+        const state = el.enabled ? '' : ' [disabled]';
+        lines.push(`  [${el.controlType}]${label} at (${el.x},${el.y}) ${el.width}x${el.height}${state}`);
+      }
+    } else {
+      lines.push('', 'No visible UI elements found.');
+    }
+
+    return lines.join('\n');
+  }
+
   async wait(duration: number): Promise<void> {
     await new Promise(r => setTimeout(r, duration * 1000));
   }
