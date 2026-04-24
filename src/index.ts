@@ -31,7 +31,7 @@ function assertArgs<T>(args: unknown, name: string): T {
 const TOOLS: any[] = [
   {
     name: 'screenshot',
-    description: 'Capture the screen and return it as a base64 encoded JPEG.',
+    description: '[EXPENSIVE ~50k tokens] Capture the screen as JPEG. Use only when visual confirmation is necessary. Prefer get_ui_elements, get_frontmost_app, and get_display_size for understanding screen state.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -211,6 +211,11 @@ const TOOLS: any[] = [
     },
   },
   {
+    name: 'get_ui_elements',
+    description: `[LOW COST ~500 tokens] Returns structured UI element tree of the currently focused window. Each element includes name, control type, bounding rectangle, enabled/visible state. Prefer this over screenshot for understanding what's on screen.`,
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
     name: 'wait',
     description: 'Wait for a specified duration (in seconds). Use this to allow UI rendering to complete before the next operation.',
     inputSchema: {
@@ -326,6 +331,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { text } = assertArgs<{ text: string }>(args, name);
         await executor.writeClipboard(text);
         result = { success: true };
+        break;
+      }
+      case 'get_ui_elements': {
+        result = await executor.getUiElements();
         break;
       }
       case 'wait': {

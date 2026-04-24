@@ -41,4 +41,17 @@ export interface ComputerExecutor {
   readClipboard(): Promise<string>;
   writeClipboard(text: string): Promise<void>;
   wait(duration: number): Promise<void>;
+  getUiElements(): Promise<UiElementInfo[]>;
+}
+
+export interface UiElementInfo {
+  name: string;
+  controlType: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  enabled: boolean;
+  visible: boolean;
+  depth: number;
 }

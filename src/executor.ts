@@ -1,4 +1,4 @@
-import type { ComputerExecutor, DisplayGeometry, ScreenshotResult, FrontmostApp, InstalledApp } from './types.js';
+import type { ComputerExecutor, DisplayGeometry, ScreenshotResult, FrontmostApp, InstalledApp, UiElementInfo } from './types.js';
 import { requireNativeModule } from './native-loader.js';
 import { logicalToPhysical, findMonitorByLogicalPoint } from './utils.js';
 import type { MonitorInfo } from './utils.js';
@@ -239,6 +239,10 @@ export class WindowsComputerExecutor implements ComputerExecutor {
 
   async writeClipboard(text: string): Promise<void> {
     await this.native.writeClipboard(text);
+  }
+
+  async getUiElements(): Promise<UiElementInfo[]> {
+    return await this.native.getUiElements();
   }
 
   async wait(duration: number): Promise<void> {

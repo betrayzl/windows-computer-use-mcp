@@ -6,6 +6,7 @@ mod input;
 mod hotkey;
 mod clipboard;
 mod apps;
+mod uia;
 
 pub use capture::*;
 pub use window::*;
@@ -13,6 +14,7 @@ pub use input::*;
 pub use hotkey::*;
 pub use clipboard::*;
 pub use apps::*;
+pub use uia::*;
 
 // ========== 临时诊断代码，验证完成后可删除 ==========
 use napi::bindgen_prelude::*;
