@@ -1,0 +1,16 @@
+# Rust build artifacts
+native/target/
+
+# TypeScript compilation output
+dist/
+
+# Node modules
+node_modules/
+
+# Backup files
+*.bak
+*.prev
+
+# OS files
+Thumbs.db
+.DS_Store

@@ -11,14 +11,16 @@ export interface MonitorInfo {
 }
 
 /**
- * 将逻辑坐标（0 ~ width-1, 0 ~ height-1）转换为全局物理像素坐标
- * @param logicalX 目标点在所属显示器上的逻辑 X 坐标
- * @param logicalY 目标点在所属显示器上的逻辑 Y 坐标
- * @param monitor 目标显示器信息
+ * 将逻辑坐标转换为全局物理像素坐标。
+ * 逻辑坐标是全局统一的：全局逻辑 X = 物理 X / 缩放因子。
+ * 在任意显示器上，此转换与显示器位置无关——位置信息已在 findMonitorByLogicalPoint 中用于定位显示器。
+ * @param logicalX 全局逻辑 X
+ * @param logicalY 全局逻辑 Y
+ * @param monitor 目标显示器（仅用于获取 scaleFactor）
  */
 export function logicalToPhysical(logicalX: number, logicalY: number, monitor: MonitorInfo): { x: number; y: number } {
-    const physicalX = monitor.left + logicalX * monitor.scaleFactor;
-    const physicalY = monitor.top + logicalY * monitor.scaleFactor;
+    const physicalX = logicalX * monitor.scaleFactor;
+    const physicalY = logicalY * monitor.scaleFactor;
     return { x: Math.round(physicalX), y: Math.round(physicalY) };
 }
 
@@ -41,6 +43,34 @@ export function findMonitorByLogicalPoint(x: number, y: number, monitors: Monito
         }
     }
     // 回退到主显示器或第一个
+    return monitors.find(m => m.isPrimary) || monitors[0];
+}
+
+/**
+ * 将物理像素坐标转换为全局逻辑坐标。
+ * 全局逻辑坐标在整个桌面空间内定义，跨显示器一致。
+ * @param physicalX 物理 X
+ * @param physicalY 物理 Y
+ * @param monitor 目标显示器（仅用于获取 scaleFactor）
+ */
+export function physicalToLogical(physicalX: number, physicalY: number, monitor: MonitorInfo): { x: number; y: number } {
+    const logicalX = physicalX / monitor.scaleFactor;
+    const logicalY = physicalY / monitor.scaleFactor;
+    return { x: Math.round(logicalX), y: Math.round(logicalY) };
+}
+
+/**
+ * 根据物理坐标查找所在的显示器
+ * @param x 物理 X
+ * @param y 物理 Y
+ * @param monitors 所有显示器信息
+ */
+export function findMonitorByPhysicalPoint(x: number, y: number, monitors: MonitorInfo[]): MonitorInfo | undefined {
+    for (const mon of monitors) {
+        if (x >= mon.left && x < mon.right && y >= mon.top && y < mon.bottom) {
+            return mon;
+        }
+    }
     return monitors.find(m => m.isPrimary) || monitors[0];
 }
 
