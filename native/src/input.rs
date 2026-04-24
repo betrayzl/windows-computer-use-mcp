@@ -66,6 +66,22 @@ impl InputController {
     }
 
     #[napi]
+    pub fn release_all_modifiers(&mut self) -> Result<()> {
+        // 释放所有可能的修饰键，防止按键卡死
+        let modifiers = [enigo::Key::Control, enigo::Key::Shift, enigo::Key::Alt, enigo::Key::Meta];
+        for &key in &modifiers {
+            let _ = self.enigo.key(key, enigo::Direction::Release);
+        }
+        // 短暂等待确保操作系统处理完释放事件
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        // 再发一轮确保状态清除
+        for &key in &modifiers {
+            let _ = self.enigo.key(key, enigo::Direction::Release);
+        }
+        Ok(())
+    }
+
+    #[napi]
     pub fn type_text(&mut self, text: String) -> Result<()> {
         self.enigo.text(&text).map_err(|e| Error::from_reason(e.to_string()))
     }

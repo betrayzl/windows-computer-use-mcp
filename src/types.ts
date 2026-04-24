@@ -40,4 +40,5 @@ export interface ComputerExecutor {
   openApp(path: string): Promise<void>;
   readClipboard(): Promise<string>;
   writeClipboard(text: string): Promise<void>;
+  wait(duration: number): Promise<void>;
 }

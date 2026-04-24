@@ -12,7 +12,7 @@ napi = { version = "2", features = ["async", "tokio_rt"] }
 napi-derive = "2"
 tokio = { version = "1", features = ["full"] }
 enigo = "0.4"
-image = { version = "0.25", default-features = false, features = ["jpeg"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 win-hotkeys = "0.2"
 arboard = "3.4"
 winreg = "0.52"
