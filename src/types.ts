@@ -42,6 +42,8 @@ export interface ComputerExecutor {
   writeClipboard(text: string): Promise<void>;
   wait(duration: number): Promise<void>;
   getUiElements(): Promise<UiElementInfo[]>;
+  captureRegion(x: number, y: number, width: number, height: number, quality: number, maxWidth: number, maxHeight: number): Promise<string>;
+  getWindowRect(processName: string): Promise<WindowRect | null>;
 }
 
 export interface UiElementInfo {
@@ -54,4 +56,11 @@ export interface UiElementInfo {
   enabled: boolean;
   visible: boolean;
   depth: number;
+}
+
+export interface WindowRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }

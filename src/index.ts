@@ -211,6 +211,31 @@ const TOOLS: any[] = [
     },
   },
   {
+    name: 'get_window_rect',
+    description: 'Get the bounding rectangle (physical coordinates) of a window by process name. Use with capture_region to screenshot just that window.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        processName: { type: 'string', description: 'Process name (e.g., "notepad", "chrome")' },
+      },
+      required: ['processName'],
+    },
+  },
+  {
+    name: 'capture_region',
+    description: '[LOWER COST ~5k tokens vs full screenshot] Capture a specific screen region as base64 JPEG. Region coordinates are in physical pixels. Use get_window_rect to find window coordinates first.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        x: { type: 'number', description: 'Region left (physical pixels)' },
+        y: { type: 'number', description: 'Region top (physical pixels)' },
+        width: { type: 'number', description: 'Region width (physical pixels)' },
+        height: { type: 'number', description: 'Region height (physical pixels)' },
+      },
+      required: ['x', 'y', 'width', 'height'],
+    },
+  },
+  {
     name: 'get_ui_elements',
     description: `[LOW COST ~500 tokens] Returns structured UI element tree of the currently focused window. Each element includes name, control type, bounding rectangle, enabled/visible state. Prefer this over screenshot for understanding what's on screen.`,
     inputSchema: { type: 'object', properties: {} },
@@ -332,6 +357,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         await executor.writeClipboard(text);
         result = { success: true };
         break;
+      }
+      case 'get_window_rect': {
+        const { processName } = assertArgs<{ processName: string }>(args, name);
+        result = await executor.getWindowRect(processName);
+        break;
+      }
+      case 'capture_region': {
+        const { x, y, width, height } = assertArgs<{ x: number; y: number; width: number; height: number }>(args, name);
+        const quality = 0.75;
+        const maxW = Math.floor(Math.max(width, 1));
+        const maxH = Math.floor(Math.max(height, 1));
+        const base64 = await executor.captureRegion(Math.floor(x), Math.floor(y), Math.floor(width), Math.floor(height), quality, maxW, maxH);
+        if (typeof base64 === 'string' && base64.startsWith('{"base64":')) {
+          try { const p = JSON.parse(base64); if (p.base64) return { content: [{ type: 'image', data: p.base64, mimeType: 'image/jpeg' }] }; } catch(e) {}
+        }
+        return { content: [{ type: 'image', data: base64, mimeType: 'image/jpeg' }] };
       }
       case 'get_ui_elements': {
         result = await executor.getUiElements();

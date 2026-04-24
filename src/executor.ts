@@ -1,4 +1,4 @@
-import type { ComputerExecutor, DisplayGeometry, ScreenshotResult, FrontmostApp, InstalledApp, UiElementInfo } from './types.js';
+import type { ComputerExecutor, DisplayGeometry, ScreenshotResult, FrontmostApp, InstalledApp, UiElementInfo, WindowRect } from './types.js';
 import { requireNativeModule } from './native-loader.js';
 import { logicalToPhysical, findMonitorByLogicalPoint } from './utils.js';
 import type { MonitorInfo } from './utils.js';
@@ -243,6 +243,14 @@ export class WindowsComputerExecutor implements ComputerExecutor {
 
   async getUiElements(): Promise<UiElementInfo[]> {
     return await this.native.getUiElements();
+  }
+
+  async captureRegion(x: number, y: number, width: number, height: number, quality: number, maxWidth: number, maxHeight: number): Promise<string> {
+    return await this.screenCapture.captureRegion(x, y, width, height, quality, maxWidth, maxHeight);
+  }
+
+  async getWindowRect(processName: string): Promise<WindowRect | null> {
+    return await this.windowManager.getWindowRect(processName);
   }
 
   async wait(duration: number): Promise<void> {

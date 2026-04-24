@@ -38,6 +38,14 @@ pub struct FrontmostApp {
     pub process_path: String,
 }
 
+#[napi(object)]
+pub struct RegionRect {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
 #[napi]
 pub struct WindowManager;
 
@@ -258,6 +266,35 @@ impl WindowManager {
         }
 
         found
+    }
+
+    #[napi]
+    pub fn get_window_rect(&self, process_name: String) -> Result<Option<RegionRect>> {
+        let mut target_hwnd: Option<HWND> = None;
+        let lower_name = process_name.to_lowercase();
+
+        unsafe {
+            let mut context = (&mut target_hwnd, &lower_name);
+            let _ = EnumWindows(Some(enum_windows_find_proc), LPARAM(&mut context as *mut _ as isize));
+        }
+
+        if let Some(hwnd) = target_hwnd {
+            unsafe {
+                let mut rect = RECT::default();
+                if GetWindowRect(hwnd, &mut rect).is_ok() {
+                    Ok(Some(RegionRect {
+                        x: rect.left,
+                        y: rect.top,
+                        width: rect.right - rect.left,
+                        height: rect.bottom - rect.top,
+                    }))
+                } else {
+                    Ok(None)
+                }
+            }
+        } else {
+            Ok(None)
+        }
     }
 } // ← 这个括号关闭了 impl WindowManager，之前可能被丢失
 
