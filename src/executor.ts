@@ -153,8 +153,11 @@ export class WindowsComputerExecutor implements ComputerExecutor {
   }
 
   async key(sequence: string): Promise<void> {
-    await this.inputController.key(sequence, 'press');
-    await this.inputController.key(sequence, 'release');
+    try {
+      await this.inputController.key(sequence, 'press');
+    } finally {
+      await this.inputController.releaseAllModifiers();
+    }
   }
 
   // 保持与 types.ts ComputerExecutor 接口一致：type(text: string)
@@ -236,5 +239,9 @@ export class WindowsComputerExecutor implements ComputerExecutor {
 
   async writeClipboard(text: string): Promise<void> {
     await this.native.writeClipboard(text);
+  }
+
+  async wait(duration: number): Promise<void> {
+    await new Promise(r => setTimeout(r, duration * 1000));
   }
 }

@@ -210,6 +210,17 @@ const TOOLS: any[] = [
       required: ['text'],
     },
   },
+  {
+    name: 'wait',
+    description: 'Wait for a specified duration (in seconds). Use this to allow UI rendering to complete before the next operation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        duration: { type: 'number', description: 'Duration in seconds' },
+      },
+      required: ['duration'],
+    },
+  },
 ];
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -225,12 +236,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       case 'screenshot': {
         const { exclude } = assertArgs<{ exclude?: string[] }>(args, name);
-        if (exclude) {
-          result = await executor.screenshot({ excludeProcessNames: exclude });
-        } else {
-          result = await executor.screenshot({});
-        }
-        break;
+        const screenshotResult = exclude
+          ? await executor.screenshot({ excludeProcessNames: exclude })
+          : await executor.screenshot({});
+        return {
+          content: [{
+            type: 'image',
+            data: screenshotResult.base64,
+            mimeType: 'image/jpeg',
+          }],
+        };
       }
       case 'get_display_size': {
         result = await executor.getDisplaySize();
@@ -310,6 +325,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'write_clipboard': {
         const { text } = assertArgs<{ text: string }>(args, name);
         await executor.writeClipboard(text);
+        result = { success: true };
+        break;
+      }
+      case 'wait': {
+        const { duration } = assertArgs<{ duration: number }>(args, name);
+        await executor.wait(duration);
         result = { success: true };
         break;
       }
