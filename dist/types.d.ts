@@ -42,5 +42,27 @@ export interface ComputerExecutor {
     openApp(path: string): Promise<void>;
     readClipboard(): Promise<string>;
     writeClipboard(text: string): Promise<void>;
+    wait(duration: number): Promise<void>;
+    getUiElements(): Promise<UiElementInfo[]>;
+    captureRegion(x: number, y: number, width: number, height: number, quality: number, maxWidth: number, maxHeight: number): Promise<string>;
+    getWindowRect(processName: string): Promise<WindowRect | null>;
+    describeScreen(): Promise<string>;
+}
+export interface UiElementInfo {
+    name: string;
+    controlType: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    enabled: boolean;
+    visible: boolean;
+    depth: number;
+}
+export interface WindowRect {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
 }
 //# sourceMappingURL=types.d.ts.map

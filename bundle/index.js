@@ -7358,8 +7358,12 @@ class WindowsComputerExecutor {
         }
     }
     async key(sequence) {
-        await this.inputController.key(sequence, 'press');
-        await this.inputController.key(sequence, 'release');
+        try {
+            await this.inputController.key(sequence, 'press');
+        }
+        finally {
+            await this.inputController.releaseAllModifiers();
+        }
     }
     // 保持与 types.ts ComputerExecutor 接口一致：type(text: string)
     // 我们内部可以处理可选 processName，但不暴露给接口
@@ -7438,6 +7442,44 @@ class WindowsComputerExecutor {
     async writeClipboard(text) {
         await this.native.writeClipboard(text);
     }
+    async getUiElements() {
+        return await this.native.getUiElements();
+    }
+    async captureRegion(x, y, width, height, quality, maxWidth, maxHeight) {
+        return await this.screenCapture.captureRegion(x, y, width, height, quality, maxWidth, maxHeight);
+    }
+    async getWindowRect(processName) {
+        return await this.windowManager.getWindowRect(processName);
+    }
+    async describeScreen() {
+        const [foreground, display, elements] = await Promise.all([
+            this.getFrontmostApp().catch(() => null),
+            this.getDisplaySize().catch(() => null),
+            this.getUiElements().catch(() => []),
+        ]);
+        const lines = [];
+        lines.push(`Display: ${display?.width ?? '?'}x${display?.height ?? '?'} @${display?.scaleFactor ?? 1}x scale`);
+        lines.push(`Foreground: ${foreground?.displayName ?? 'unknown'} (${foreground?.bundleId ?? '?'})`);
+        // Filter visible, sizable elements at reasonable depth
+        const visible = elements.filter(e => e.visible && e.width > 10 && e.height > 10 && e.depth <= 3);
+        // Sort top-to-bottom, left-to-right
+        visible.sort((a, b) => a.y - b.y || a.x - b.x);
+        if (visible.length > 0) {
+            lines.push('', `UI Elements (${visible.length} visible):`);
+            for (const el of visible) {
+                const label = el.name ? ` "${el.name.slice(0, 80)}"` : '';
+                const state = el.enabled ? '' : ' [disabled]';
+                lines.push(`  [${el.controlType}]${label} at (${el.x},${el.y}) ${el.width}x${el.height}${state}`);
+            }
+        }
+        else {
+            lines.push('', 'No visible UI elements found.');
+        }
+        return lines.join('\n');
+    }
+    async wait(duration) {
+        await new Promise(r => setTimeout(r, duration * 1000));
+    }
 }
 //# sourceMappingURL=executor.js.map
 
@@ -7477,7 +7519,7 @@ function assertArgs(args, name) {
 const TOOLS = [
     {
         name: 'screenshot',
-        description: 'Capture the screen and return it as a base64 encoded JPEG.',
+        description: '[EXPENSIVE ~50k tokens] Capture the screen as JPEG. Use only when visual confirmation is necessary. Prefer get_ui_elements, get_frontmost_app, and get_display_size for understanding screen state.',
         inputSchema: {
             type: 'object',
             properties: {
@@ -7656,6 +7698,52 @@ const TOOLS = [
             required: ['text'],
         },
     },
+    {
+        name: 'get_window_rect',
+        description: 'Get the bounding rectangle (physical coordinates) of a window by process name. Use with capture_region to screenshot just that window.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                processName: { type: 'string', description: 'Process name (e.g., "notepad", "chrome")' },
+            },
+            required: ['processName'],
+        },
+    },
+    {
+        name: 'capture_region',
+        description: '[LOWER COST ~5k tokens vs full screenshot] Capture a specific screen region as base64 JPEG. Region coordinates are in physical pixels. Use get_window_rect to find window coordinates first.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                x: { type: 'number', description: 'Region left (physical pixels)' },
+                y: { type: 'number', description: 'Region top (physical pixels)' },
+                width: { type: 'number', description: 'Region width (physical pixels)' },
+                height: { type: 'number', description: 'Region height (physical pixels)' },
+            },
+            required: ['x', 'y', 'width', 'height'],
+        },
+    },
+    {
+        name: 'describe_screen',
+        description: `[LOWEST COST ~1000 tokens] Returns a complete text description of the current screen state: foreground app, display geometry, and all visible UI elements with positions and labels. Use this FIRST before any operation — it replaces the need for a screenshot in most cases.`,
+        inputSchema: { type: 'object', properties: {} },
+    },
+    {
+        name: 'get_ui_elements',
+        description: `[LOW COST ~500 tokens] Returns structured UI element tree of the currently focused window. Each element includes name, control type, bounding rectangle, enabled/visible state. Prefer this over screenshot for understanding what's on screen.`,
+        inputSchema: { type: 'object', properties: {} },
+    },
+    {
+        name: 'wait',
+        description: 'Wait for a specified duration (in seconds). Use this to allow UI rendering to complete before the next operation.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                duration: { type: 'number', description: 'Duration in seconds' },
+            },
+            required: ['duration'],
+        },
+    },
 ];
 server.setRequestHandler(_modelcontextprotocol_sdk_types_js__WEBPACK_IMPORTED_MODULE_2__/* .ListToolsRequestSchema */ .gW, async () => {
     return {
@@ -7669,13 +7757,16 @@ server.setRequestHandler(_modelcontextprotocol_sdk_types_js__WEBPACK_IMPORTED_MO
         switch (name) {
             case 'screenshot': {
                 const { exclude } = assertArgs(args, name);
-                if (exclude) {
-                    result = await executor.screenshot({ excludeProcessNames: exclude });
-                }
-                else {
-                    result = await executor.screenshot({});
-                }
-                break;
+                const screenshotResult = exclude
+                    ? await executor.screenshot({ excludeProcessNames: exclude })
+                    : await executor.screenshot({});
+                return {
+                    content: [{
+                            type: 'image',
+                            data: screenshotResult.base64,
+                            mimeType: 'image/jpeg',
+                        }],
+                };
             }
             case 'get_display_size': {
                 result = await executor.getDisplaySize();
@@ -7755,6 +7846,41 @@ server.setRequestHandler(_modelcontextprotocol_sdk_types_js__WEBPACK_IMPORTED_MO
             case 'write_clipboard': {
                 const { text } = assertArgs(args, name);
                 await executor.writeClipboard(text);
+                result = { success: true };
+                break;
+            }
+            case 'describe_screen': {
+                result = { description: await executor.describeScreen() };
+                break;
+            }
+            case 'get_window_rect': {
+                const { processName } = assertArgs(args, name);
+                result = await executor.getWindowRect(processName);
+                break;
+            }
+            case 'capture_region': {
+                const { x, y, width, height } = assertArgs(args, name);
+                const quality = 0.75;
+                const maxW = Math.floor(Math.max(width, 1));
+                const maxH = Math.floor(Math.max(height, 1));
+                const base64 = await executor.captureRegion(Math.floor(x), Math.floor(y), Math.floor(width), Math.floor(height), quality, maxW, maxH);
+                if (typeof base64 === 'string' && base64.startsWith('{"base64":')) {
+                    try {
+                        const p = JSON.parse(base64);
+                        if (p.base64)
+                            return { content: [{ type: 'image', data: p.base64, mimeType: 'image/jpeg' }] };
+                    }
+                    catch (e) { }
+                }
+                return { content: [{ type: 'image', data: base64, mimeType: 'image/jpeg' }] };
+            }
+            case 'get_ui_elements': {
+                result = await executor.getUiElements();
+                break;
+            }
+            case 'wait': {
+                const { duration } = assertArgs(args, name);
+                await executor.wait(duration);
                 result = { success: true };
                 break;
             }

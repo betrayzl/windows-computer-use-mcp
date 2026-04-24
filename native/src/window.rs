@@ -189,6 +189,8 @@ impl WindowManager {
                 let _ = ShowWindow(hwnd, SW_SHOW);
                 thread::sleep(Duration::from_millis(80));
 
+                // Method 1: AllowSetForegroundWindow + SetForegroundWindow + BringWindowToTop
+                let _ = AllowSetForegroundWindow(u32::MAX);
                 let _ = SetForegroundWindow(hwnd);
                 let _ = BringWindowToTop(hwnd);
                 thread::sleep(Duration::from_millis(150));
@@ -200,24 +202,67 @@ impl WindowManager {
                 let mut target_thread_id = 0u32;
                 GetWindowThreadProcessId(hwnd, Some(&mut target_thread_id));
 
+                // Method 2: AttachThreadInput + SetForegroundWindow
                 if target_thread_id != 0 && current_thread_id != target_thread_id {
+                    let _ = AllowSetForegroundWindow(target_thread_id);
                     let _ = AttachThreadInput(current_thread_id, target_thread_id, true);
                     thread::sleep(Duration::from_millis(50));
-
                     let _ = SetForegroundWindow(hwnd);
                     let _ = BringWindowToTop(hwnd);
                     thread::sleep(Duration::from_millis(150));
-
                     let _ = AttachThreadInput(current_thread_id, target_thread_id, false);
-
                     if GetForegroundWindow() == hwnd {
                         return Ok(true);
                     }
                 }
 
-                println!("[WARN] Falling back to physical Alt+Tab simulation for {:?}", hwnd);
-                simulate_alt_tab();
-                thread::sleep(Duration::from_millis(300));
+                // Method 3: SetWindowPos to promote target in Z-order before retry
+                let _ = SetWindowPos(hwnd, None, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                thread::sleep(Duration::from_millis(50));
+
+                // Method 4: UI Automation SetFocus (works across integrity levels for focus-but-not-foreground)
+                println!("[WARN] Trying UIA SetFocus for {:?}", hwnd);
+                let _ = crate::uia::focus_window_uia(hwnd);
+                thread::sleep(Duration::from_millis(200));
+                if GetForegroundWindow() == hwnd {
+                    return Ok(true);
+                }
+
+                // Method 5: Minimize the current foreground window via UIA WindowPattern
+                // (works across UIPI where ShowWindow/SendInput fail)
+                let blocking_fg = GetForegroundWindow();
+                if blocking_fg != hwnd && blocking_fg.0 != std::ptr::null_mut() {
+                    println!("[WARN] Minimizing blocking window {:?} via UIA to unblock focus", blocking_fg);
+                    let minimized = crate::uia::minimize_window_uia(blocking_fg);
+                    if minimized {
+                        println!("[WARN] Blocking window minimized via UIA, retrying focus...");
+                    } else {
+                        println!("[WARN] UIA minimize failed, trying ShowWindow...");
+                        let _ = ShowWindow(blocking_fg, SW_MINIMIZE);
+                    }
+                    thread::sleep(Duration::from_millis(500));
+
+                    // Retry focus after minimizing the blocker
+                    let _ = AllowSetForegroundWindow(u32::MAX);
+                    let _ = ShowWindow(hwnd, SW_RESTORE);
+                    let _ = SetForegroundWindow(hwnd);
+                    let _ = BringWindowToTop(hwnd);
+                    thread::sleep(Duration::from_millis(200));
+                    if GetForegroundWindow() == hwnd {
+                        return Ok(true);
+                    }
+
+                    // Try one more Alt+Tab in case the minimize changed the ordering
+                    simulate_alt_tab();
+                    thread::sleep(Duration::from_millis(300));
+                    if GetForegroundWindow() == hwnd {
+                        return Ok(true);
+                    }
+                }
+
+                // Method 6: Final attempt — set window pos to top with show flag
+                let _ = SetWindowPos(hwnd, None, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                thread::sleep(Duration::from_millis(100));
 
                 Ok(GetForegroundWindow() == hwnd)
             }
@@ -296,11 +341,12 @@ impl WindowManager {
             Ok(None)
         }
     }
-} // ← 这个括号关闭了 impl WindowManager，之前可能被丢失
+}
 
-// Alt+Tab 模拟
+// ========== Alt+Tab 模拟实现 ==========
 unsafe fn simulate_alt_tab() {
     let inputs: [INPUT; 4] = [
+        // Alt down
         INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
@@ -313,6 +359,7 @@ unsafe fn simulate_alt_tab() {
                 },
             },
         },
+        // Tab down
         INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
@@ -325,6 +372,7 @@ unsafe fn simulate_alt_tab() {
                 },
             },
         },
+        // Tab up
         INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
@@ -337,6 +385,7 @@ unsafe fn simulate_alt_tab() {
                 },
             },
         },
+        // Alt up
         INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
@@ -352,10 +401,12 @@ unsafe fn simulate_alt_tab() {
     ];
 
     for input in inputs.iter() {
-        SendInput(&[*input], std::mem::size_of::<INPUT>() as i32);
+        let _ = SendInput(&[*input], std::mem::size_of::<INPUT>() as i32);
         thread::sleep(Duration::from_millis(50));
     }
 }
+
+// ========== 回调与工具函数 ==========
 
 unsafe extern "system" fn monitor_enum_proc(
     hmon: HMONITOR,

@@ -1,4 +1,4 @@
-import type { ComputerExecutor, DisplayGeometry, ScreenshotResult, FrontmostApp, InstalledApp } from './types.js';
+import type { ComputerExecutor, DisplayGeometry, ScreenshotResult, FrontmostApp, InstalledApp, UiElementInfo, WindowRect } from './types.js';
 export declare class WindowsComputerExecutor implements ComputerExecutor {
     private native;
     private screenCapture;
@@ -32,5 +32,10 @@ export declare class WindowsComputerExecutor implements ComputerExecutor {
     openApp(path: string): Promise<void>;
     readClipboard(): Promise<string>;
     writeClipboard(text: string): Promise<void>;
+    getUiElements(): Promise<UiElementInfo[]>;
+    captureRegion(x: number, y: number, width: number, height: number, quality: number, maxWidth: number, maxHeight: number): Promise<string>;
+    getWindowRect(processName: string): Promise<WindowRect | null>;
+    describeScreen(): Promise<string>;
+    wait(duration: number): Promise<void>;
 }
 //# sourceMappingURL=executor.d.ts.map

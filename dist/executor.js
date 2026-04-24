@@ -151,8 +151,12 @@ export class WindowsComputerExecutor {
         }
     }
     async key(sequence) {
-        await this.inputController.key(sequence, 'press');
-        await this.inputController.key(sequence, 'release');
+        try {
+            await this.inputController.key(sequence, 'press');
+        }
+        finally {
+            await this.inputController.releaseAllModifiers();
+        }
     }
     // 保持与 types.ts ComputerExecutor 接口一致：type(text: string)
     // 我们内部可以处理可选 processName，但不暴露给接口
@@ -230,6 +234,44 @@ export class WindowsComputerExecutor {
     }
     async writeClipboard(text) {
         await this.native.writeClipboard(text);
+    }
+    async getUiElements() {
+        return await this.native.getUiElements();
+    }
+    async captureRegion(x, y, width, height, quality, maxWidth, maxHeight) {
+        return await this.screenCapture.captureRegion(x, y, width, height, quality, maxWidth, maxHeight);
+    }
+    async getWindowRect(processName) {
+        return await this.windowManager.getWindowRect(processName);
+    }
+    async describeScreen() {
+        const [foreground, display, elements] = await Promise.all([
+            this.getFrontmostApp().catch(() => null),
+            this.getDisplaySize().catch(() => null),
+            this.getUiElements().catch(() => []),
+        ]);
+        const lines = [];
+        lines.push(`Display: ${display?.width ?? '?'}x${display?.height ?? '?'} @${display?.scaleFactor ?? 1}x scale`);
+        lines.push(`Foreground: ${foreground?.displayName ?? 'unknown'} (${foreground?.bundleId ?? '?'})`);
+        // Filter visible, sizable elements at reasonable depth
+        const visible = elements.filter(e => e.visible && e.width > 10 && e.height > 10 && e.depth <= 3);
+        // Sort top-to-bottom, left-to-right
+        visible.sort((a, b) => a.y - b.y || a.x - b.x);
+        if (visible.length > 0) {
+            lines.push('', `UI Elements (${visible.length} visible):`);
+            for (const el of visible) {
+                const label = el.name ? ` "${el.name.slice(0, 80)}"` : '';
+                const state = el.enabled ? '' : ' [disabled]';
+                lines.push(`  [${el.controlType}]${label} at (${el.x},${el.y}) ${el.width}x${el.height}${state}`);
+            }
+        }
+        else {
+            lines.push('', 'No visible UI elements found.');
+        }
+        return lines.join('\n');
+    }
+    async wait(duration) {
+        await new Promise(r => setTimeout(r, duration * 1000));
     }
 }
 //# sourceMappingURL=executor.js.map

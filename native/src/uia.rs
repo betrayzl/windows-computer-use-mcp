@@ -3,6 +3,7 @@ use napi_derive::napi;
 use windows::Win32::UI::Accessibility::*;
 use windows::Win32::System::Com::*;
 use windows::Win32::Foundation::RECT;
+use windows::Win32::Foundation::HWND;
 use windows::core::BOOL;
 
 #[napi(object)]
@@ -127,6 +128,46 @@ unsafe fn element_to_info(elem: &IUIAutomationElement, depth: i32) -> Result<UiE
         visible,
         depth,
     })
+}
+
+/// Focus a window by HWND using UI Automation SetFocus().
+pub unsafe fn focus_window_uia(hwnd: HWND) -> bool {
+    let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+    let uia: IUIAutomation = match CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) {
+        Ok(uia) => uia,
+        Err(_) => return false,
+    };
+
+    match uia.ElementFromHandle(hwnd) {
+        Ok(elem) => elem.SetFocus().is_ok(),
+        Err(_) => false,
+    }
+}
+
+/// Minimize a window by HWND using UI Automation WindowPattern.
+/// Works across integrity levels where ShowWindow may fail due to UIPI.
+pub unsafe fn minimize_window_uia(hwnd: HWND) -> bool {
+    let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+    let uia: IUIAutomation = match CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) {
+        Ok(uia) => uia,
+        Err(_) => return false,
+    };
+
+    let elem = match uia.ElementFromHandle(hwnd) {
+        Ok(elem) => elem,
+        Err(_) => return false,
+    };
+
+    // Get the WindowPattern
+    let pattern: IUIAutomationWindowPattern = match elem.GetCurrentPatternAs(UIA_WindowPatternId) {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+
+    // Minimize the window
+    pattern.SetWindowVisualState(WindowVisualState_Minimized).is_ok()
 }
 
 fn control_type_name(id: i32) -> &'static str {
