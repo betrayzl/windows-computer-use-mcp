@@ -1,6 +1,6 @@
 import type { ComputerExecutor, DisplayGeometry, ScreenshotResult, FrontmostApp, InstalledApp, UiElementInfo, WindowRect } from './types.js';
 import { requireNativeModule } from './native-loader.js';
-import { logicalToPhysical, findMonitorByLogicalPoint } from './utils.js';
+import { logicalToPhysical, physicalToLogical, findMonitorByLogicalPoint, findMonitorByPhysicalPoint } from './utils.js';
 import type { MonitorInfo } from './utils.js';
 
 export class WindowsComputerExecutor implements ComputerExecutor {
@@ -241,8 +241,106 @@ export class WindowsComputerExecutor implements ComputerExecutor {
     await this.native.writeClipboard(text);
   }
 
-  async getUiElements(): Promise<UiElementInfo[]> {
-    return await this.native.getUiElements();
+  async getUiElements(processName?: string): Promise<UiElementInfo[]> {
+    const elements = await this.native.getUiElements(processName || null);
+    // UIA 返回物理像素坐标，需转为逻辑坐标以保持与 click/move 工具一致
+    await this.refreshMonitors();
+    return elements.map((el: UiElementInfo) => {
+      if (this.monitors.length > 0) {
+        const monitor = findMonitorByPhysicalPoint(el.x + el.width / 2, el.y + el.height / 2, this.monitors);
+        if (monitor && monitor.scaleFactor !== 1.0) {
+          const logical = physicalToLogical(el.x, el.y, monitor);
+          const logicalW = Math.round(el.width / monitor.scaleFactor);
+          const logicalH = Math.round(el.height / monitor.scaleFactor);
+          return { ...el, x: logical.x, y: logical.y, width: logicalW, height: logicalH };
+        }
+      }
+      return el;
+    });
+  }
+
+  async showDesktop(): Promise<void> {
+    // Win+D: show desktop (minimize all windows)
+    await this.key('meta+d');
+    await new Promise(r => setTimeout(r, 500)); // Wait for animation
+  }
+
+  async getDesktopIcons(): Promise<{ elements: UiElementInfo[]; hint: string }> {
+    // 先显示桌面，确保图标可见且不被遮挡
+    await this.showDesktop();
+    const elements = await this.getUiElements('explorer');
+    const icons = elements.filter(e =>
+      e.controlType === 'list_item' && e.name && e.name.trim().length > 0
+    );
+    const hint = icons.length > 0
+      ? `已列出 ${icons.length} 个桌面图标及其坐标。你可以直接使用 click 工具点击任意图标的中心坐标来启动它。`
+      : '未找到桌面图标，可以尝试使用 screenshot 查看桌面状态。';
+    return { elements: icons, hint };
+  }
+
+  async perceive(targetProcess?: string): Promise<{
+    method: string;
+    elements: UiElementInfo[];
+    description: string;
+    display: { width: number; height: number; scaleFactor: number } | null;
+    foreground: FrontmostApp | null;
+    warning: string | null;
+    hint: string;
+  }> {
+    const elements = targetProcess
+      ? await this.getUiElements(targetProcess)
+      : await this.getUiElements();
+
+    const visibleElements = elements.filter(e =>
+      e.visible && e.width > 10 && e.height > 10 && e.depth <= 3
+    );
+
+    const display = await this.getDisplaySize().catch(() => null);
+    const foreground = await this.getFrontmostApp().catch(() => null);
+
+    // 检测遮挡：如果指定了目标进程，检查它是否在前台
+    let warning: string | null = null;
+    if (targetProcess && foreground) {
+      const fgBundle = (foreground.bundleId || '').toLowerCase();
+      const fgName = (foreground.displayName || '').toLowerCase();
+      const target = targetProcess.toLowerCase();
+      const isForeground = fgBundle.includes(target) || fgName.includes(target);
+      if (!isForeground) {
+        warning = `注意：目标 "${targetProcess}" 不在前台！当前前台是 "${foreground.displayName}"。`
+          + ` 返回的元素坐标可能被其他窗口遮挡。建议先调用 focus_app({ processName: "${targetProcess}" }) 将其带到前台，`
+          + ` 或调用 show_desktop() 显示桌面。`;
+      }
+    }
+
+    let description: string;
+    if (visibleElements.length > 0) {
+      const lines: string[] = [];
+      lines.push(`前台: ${foreground?.displayName ?? 'unknown'}`);
+      if (warning) lines.push(`⚠️ ${warning}`);
+      lines.push(`通过 UI Automation 扫描到 ${visibleElements.length} 个可见元素：`);
+      visibleElements.sort((a, b) => a.y - b.y || a.x - b.x);
+      for (const el of visibleElements.slice(0, 40)) {
+        const label = el.name ? ` "${el.name.slice(0, 100)}"` : '';
+        lines.push(`  [${el.controlType}]${label} at (${el.x},${el.y}) ${el.width}x${el.height}`);
+      }
+      if (visibleElements.length > 40) {
+        lines.push(`  ... 以及另外 ${visibleElements.length - 40} 个元素`);
+      }
+      description = lines.join('\n');
+    } else {
+      const fgNote = foreground ? `当前前台: ${foreground.displayName}` : '';
+      description = `UI Automation 未扫描到可见元素。${fgNote}`
+        + (warning ? ` ⚠️ ${warning}` : '')
+        + ' 可以尝试使用 screenshot 获取屏幕截图。';
+    }
+
+    const hint = warning
+      ? `⚠️ 检测到遮挡：${warning} 请先解决遮挡问题后再操作。`
+      : visibleElements.length > 0
+        ? '已获取 UI 元素列表。使用 click 点击元素坐标，使用 type 输入文本，使用 key 发送按键。如需完整的界面描述可调用 describe_screen。'
+        : '当前界面元素较少。可以使用 screenshot 查看屏幕内容，或使用 describe_screen 获取文本描述。';
+
+    return { method: 'uia', elements, description, display, foreground, warning, hint };
   }
 
   async captureRegion(x: number, y: number, width: number, height: number, quality: number, maxWidth: number, maxHeight: number): Promise<string> {
@@ -261,7 +359,13 @@ export class WindowsComputerExecutor implements ComputerExecutor {
     ]);
 
     const lines: string[] = [];
-    lines.push(`Display: ${display?.width ?? '?'}x${display?.height ?? '?'} @${display?.scaleFactor ?? 1}x scale`);
+    if (display) {
+      const logicalW = Math.round(display.width / display.scaleFactor);
+      const logicalH = Math.round(display.height / display.scaleFactor);
+      lines.push(`Display: ${display.width}x${display.height} physical (${logicalW}x${logicalH} logical) @${display.scaleFactor}x scale`);
+    } else {
+      lines.push('Display: unknown');
+    }
     lines.push(`Foreground: ${foreground?.displayName ?? 'unknown'} (${foreground?.bundleId ?? '?'})`);
 
     // Filter visible, sizable elements at reasonable depth

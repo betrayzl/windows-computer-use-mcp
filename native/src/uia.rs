@@ -21,25 +21,26 @@ pub struct UiElementInfo {
 }
 
 #[napi]
-pub fn get_ui_elements() -> Result<Vec<UiElementInfo>> {
+pub fn get_ui_elements(process_name: Option<String>) -> Result<Vec<UiElementInfo>> {
     unsafe {
-        // 初始化 COM（如果已初始化则忽略错误）
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
 
-        let uia: IUIAutomation = CoCreateInstance(
-            &CUIAutomation,
-            None,
-            CLSCTX_INPROC_SERVER,
-        )
-        .map_err(|e| Error::from_reason(format!("CoCreateInstance IUIAutomation: {:?}", e)))?;
+        let uia: IUIAutomation = CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)
+            .map_err(|e| Error::from_reason(format!("CoCreateInstance IUIAutomation: {:?}", e)))?;
 
-        let focused = uia
-            .GetFocusedElement()
-            .map_err(|e| Error::from_reason(format!("GetFocusedElement: {:?}", e)))?;
+        // Determine root element: by process name (any window) or focused element (current behavior)
+        let root_elem = if let Some(ref name) = process_name {
+            let hwnd = crate::window::find_window_by_process_name(name)
+                .ok_or_else(|| Error::from_reason(format!("No visible window found for process '{}'", name)))?;
+            uia.ElementFromHandle(hwnd)
+                .map_err(|e| Error::from_reason(format!("ElementFromHandle({:?}): {:?}", hwnd, e)))?
+        } else {
+            uia.GetFocusedElement()
+                .map_err(|e| Error::from_reason(format!("GetFocusedElement: {:?}", e)))?
+        };
 
         let mut results = Vec::new();
-        // depth 0 = root (focused window), collect up to depth 5
-        collect_elements_tree(&uia, &focused, 0, 5, &mut results)?;
+        collect_elements_tree(&uia, &root_elem, 0, 5, &mut results)?;
 
         Ok(results)
     }

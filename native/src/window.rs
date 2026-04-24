@@ -7,6 +7,7 @@ use windows::Win32::Foundation::*;
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::System::Threading::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
+use windows::core::HSTRING;
 use windows::Win32::UI::HiDpi::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VIRTUAL_KEY,
@@ -481,6 +482,73 @@ unsafe fn get_process_name(pid: u32) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Find a top-level window HWND by process name (visible windows only).
+pub(crate) unsafe fn find_window_by_process_name(process_name: &str) -> Option<HWND> {
+    // Special case: "explorer" means the desktop icon container
+    let explorer_variants = ["explorer", "explorer.exe", "desktop"];
+    if explorer_variants.iter().any(|v| process_name.eq_ignore_ascii_case(v)) {
+        return find_desktop_hwnd();
+    }
+    let lower_target = process_name.to_lowercase();
+    let mut result: Option<HWND> = None;
+
+    extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> windows::core::BOOL {
+        let ctx = unsafe { &mut *(lparam.0 as *mut (&str, &mut Option<HWND>)) };
+        let (lower_name, out) = ctx;
+
+        if !unsafe { IsWindowVisible(hwnd).as_bool() } {
+            return windows::core::BOOL(1);
+        }
+        let mut pid = 0u32;
+        unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+        if pid == 0 {
+            return windows::core::BOOL(1);
+        }
+        if let Some(name) = unsafe { get_process_name(pid) } {
+            if name.to_lowercase().contains(*lower_name) {
+                **out = Some(hwnd);
+                return windows::core::BOOL(0);
+            }
+        }
+        windows::core::BOOL(1)
+    }
+
+    let mut context: (&str, &mut Option<HWND>) = (&lower_target, &mut result);
+    let _ = EnumWindows(Some(enum_proc), LPARAM(&mut context as *mut _ as isize));
+    result
+}
+
+/// Find the desktop window (Progman/WorkerW) that hosts desktop icons.
+unsafe fn find_desktop_hwnd() -> Option<HWND> {
+    // Try Progman first (classic desktop)
+    let progman = FindWindowW(windows::core::w!("Progman"), None).ok()?;
+    if !progman.0.is_null() {
+        // Check if Progman has SHELLDLL_DefView child
+        let def_view = FindWindowExW(Some(progman), None, windows::core::w!("SHELLDLL_DefView"), None).ok();
+        if def_view.is_some_and(|h| !h.0.is_null()) {
+            return Some(progman);
+        }
+    }
+
+    // Fallback: WorkerW (used with slideshow wallpaper on Windows 8+)
+    let mut workerw: Option<HWND> = None;
+    extern "system" fn enum_workerw(hwnd: HWND, lparam: LPARAM) -> windows::core::BOOL {
+        unsafe {
+            let out = &mut *(lparam.0 as *mut Option<HWND>);
+            // Check if this WorkerW contains SHELLDLL_DefView
+            let def_view = FindWindowExW(Some(hwnd), None, windows::core::w!("SHELLDLL_DefView"), None).ok();
+            if def_view.is_some_and(|h| !h.0.is_null()) {
+                *out = Some(hwnd);
+                return windows::core::BOOL(0);
+            }
+        }
+        windows::core::BOOL(1)
+    }
+
+    let _ = EnumWindows(Some(enum_workerw), LPARAM(&mut workerw as *mut _ as isize));
+    workerw
 }
 
 unsafe fn get_process_path(pid: u32) -> Option<String> {
