@@ -1,11 +1,19 @@
 {
   "name": "windows-computer-use-mcp",
-  "version": "1.1.0",
-  "description": "Windows Computer Use MCP Server — Human-like Windows control for AI agents via the Model Context Protocol. Combines visual perception (screenshots) with realistic mouse/keyboard simulation to operate any Windows application the way a person would, reducing API dependency and account ban risk.",
+  "version": "1.2.0",
+  "description": "Human-like Windows control for AI agents via the Model Context Protocol. Combines DXGI visual perception with simulated mouse/keyboard input. Built by a non-programmer with Claude Code.",
   "type": "module",
   "main": "bundle/index.js",
+  "bin": {
+    "windows-computer-use": "./cli.js"
+  },
+  "files": [
+    "bundle/",
+    "cli.js"
+  ],
   "scripts": {
     "build": "node build.js",
+    "prepublishOnly": "node build.js",
     "test": "echo \"Run: node tests/test_driver.js\" && exit 0"
   },
   "keywords": [
