@@ -1,10 +1,12 @@
 # Windows Computer Use MCP Server
 
+[![GitHub Stars](https://img.shields.io/github/stars/betrayzl/windows-computer-use-mcp?style=flat&color=blue)](https://github.com/betrayzl/windows-computer-use-mcp/stargazers)
+[![npm version](https://img.shields.io/npm/v/@betrayzl/windows-computer-use-mcp?color=red)](https://www.npmjs.com/package/@betrayzl/windows-computer-use-mcp)
+[![npm downloads](https://img.shields.io/npm/dw/@betrayzl/windows-computer-use-mcp?color=green)](https://www.npmjs.com/package/@betrayzl/windows-computer-use-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org/)
-[![MCP](https://img.shields.io/badge/MCP-1.0-purple)](https://modelcontextprotocol.io/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6)](https://www.microsoft.com/windows)
-[![npm](https://img.shields.io/npm/v/@betrayzl/windows-computer-use-mcp)](https://www.npmjs.com/package/@betrayzl/windows-computer-use-mcp)
+[![Star History](https://api.star-history.com/svg?repos=betrayzl/windows-computer-use-mcp&type=Date)](https://star-history.com/#betrayzl/windows-computer-use-mcp)
 
 A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that gives AI agents human-like control over Windows. Combines **visual perception** (screenshots) with **simulated mouse and keyboard input** to operate any application exactly the way a person would — no API integration required.
 
