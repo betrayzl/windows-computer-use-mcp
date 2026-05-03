@@ -14,149 +14,301 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that g
 - **Layered cost efficiency**: Use fast structured perception (`perceive`, `describe_screen`) for routine checks (~1k tokens), fall back to full screenshots only when visual confirmation is needed (~5-50k tokens), and call native APIs directly when available for zero-token operations.
 - **Multimodal-first design**: When paired with a vision-capable model, the AI can literally "see" the screen and reason about visual layouts, icons, images, and UI states — just like a human looking at a monitor.
 
-## Features
+## Table of Contents
 
-### Visual Perception (Multimodal-First)
-- **`screenshot`** — Full screen capture. When paired with a vision-capable model, the AI literally "sees" the screen — reading text, recognizing icons, understanding layouts just like a human looking at a monitor.
-- **`capture_region`** — Targeted region screenshot (~5k tokens). Capture only the window or area you need.
-- **`perceive`** — Smart screen awareness. Uses UI Automation to return structured element data (buttons, text, positions) at ~1k tokens. Automatically detects window occlusion.
-- **`describe_screen`** — Text description of current screen state. No vision model needed.
-- **`get_ui_elements`** — Raw UI Automation element tree. Lowest-cost perception (~500 tokens).
+- [Installation](#installation)
+- [Usage](#usage)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Contributing](#contributing)
+- [Security](#security)
+- [License](#license)
 
-### Human-Like Input Simulation
-- **`move_mouse`** / **`click`** / **`drag`** / **`scroll`** — Full mouse control with realistic movement. Optional `processName` auto-focuses the target window before interacting.
-- **`key`** — Keyboard input including combinations (`ctrl+c`, `alt+f4`, `ctrl+shift+escape`).
-- **`type`** — Text input with natural typing.
-
-### Window & Desktop Management
-- **`focus_app`** — Activate a window. Uses 6-level strategy including UI Automation bypass for elevated (admin) windows.
-- **`open_app`** — Launch or switch to an application.
-- **`hide_windows`** / **`unhide_windows`** — Temporarily hide windows for clean screenshots.
-- **`get_window_rect`** — Get window position and size for targeted capture.
-- **`show_desktop`** — Minimize all windows (Win+D).
-- **`get_desktop_icons`** / **`arrange_desktop_icons`** — Read and reposition desktop shortcuts.
-- **`get_frontmost_app`** — Check which window is currently in foreground.
-
-### System Access
-- **`list_installed_apps`** — Enumerate installed applications.
-- **`read_clipboard`** / **`write_clipboard`** — System clipboard access.
-- **`get_display_size`** — Monitor geometry and DPI scale factor.
-- **`wait`** — Pause for UI animations to settle.
-
-## Architecture
-
-```
-AI Agent (e.g., OPENCLAW)
-    ↕ MCP Protocol (stdio)
-Windows Computer Use MCP Server
-    ├── TypeScript Layer (src/)
-    │   ├── index.ts       — MCP tool definitions & protocol handlers
-    │   ├── executor.ts    — High-level API, DPI scaling, coordinate conversion
-    │   ├── utils.ts       — Monitor info, logical↔physical coordinate mapping
-    │   └── types.ts       — TypeScript interfaces
-    │
-    └── Rust Native Module (native/src/)
-        ├── capture.rs     — DXGI hardware-accelerated screen capture
-        ├── input.rs       — Keyboard/mouse simulation via enigo
-        ├── uia.rs         — UI Automation element tree (low-cost perception)
-        ├── window.rs      — Window management, focus, desktop icons
-        └── apps.rs        — Installed application enumeration
-```
-
-### Coordinate System
-The server uses **global logical coordinates** throughout:
-- UIA physical coordinates ÷ DPI scale = logical coordinates
-- All tools accept/return logical coordinates
-- Automatic physical ↔ logical conversion handles multi-monitor setups with different DPI scales
-
-## Quick Start
+## Installation
 
 ### Prerequisites
-- Node.js 20+
-- Rust toolchain (for native module compilation)
 
-### Build
+| Requirement | Version | Check |
+|-------------|---------|-------|
+| **Windows** | 10 or 11 | `winver` |
+| **Node.js** | ≥ 20.0.0 | `node --version` |
+| **Rust** | stable | `rustc --version` |
+| **npm** | ≥ 9.0.0 | `npm --version` |
+
+### Step 1: Clone the Repository
+
+```bash
+git clone https://github.com/betrayzl/windows-computer-use-mcp.git
+cd windows-computer-use-mcp
+```
+
+### Step 2: Install Dependencies
+
+```bash
+npm install
+```
+
+This installs the MCP SDK (`@modelcontextprotocol/sdk`), TypeScript compiler, and the `@vercel/ncc` bundler used to produce a single-file distribution.
+
+### Step 3: Build
+
 ```bash
 node build.js
 ```
 
-### Run
-```bash
-node bundle/index.js
+The build script performs four stages:
+
+1. **Compile Rust native module** — `napi build --platform --release` in `native/`
+2. **Compile TypeScript** — `tsc` compiles `src/` → `dist/`
+3. **Bundle with ncc** — `@vercel/ncc` bundles `dist/index.js` into a single `bundle/index.js`
+4. **Copy native binary** — The compiled `.node` file is copied to `bundle/win-cu-native.node`
+
+A successful build outputs:
+
+```
+✨ Build complete!
+📦 Output location: bundle/
+👉 You can now configure your MCP client to use: node bundle/index.js
 ```
 
-### MCP Client Configuration
-Add to your MCP client config (e.g., OPENCLAW, Claude Desktop):
+### Troubleshooting Build
+
+<details>
+<summary><strong>Build fails with "napi not found"</strong></summary>
+
+```bash
+npm install -g @napi-rs/cli
+```
+
+Then run `node build.js` again.
+</details>
+
+<details>
+<summary><strong>Native module fails to load</strong></summary>
+
+Ensure you ran `node build.js` (not just `tsc`) and the Rust toolchain is installed. The build script compiles `native/` from source — the `.node` file must match your CPU architecture.
+
+```bash
+# Verify Rust is installed
+rustc --version
+cargo --version
+```
+</details>
+
+<details>
+<summary><strong>Screenshot returns black image</strong></summary>
+
+This can happen when running in a virtual machine or via RDP without a GPU. Try using `describe_screen` or `perceive` instead, which use UI Automation (no GPU required).
+</details>
+
+<details>
+<summary><strong>UI Automation returns few elements</strong></summary>
+
+The target window may be running as Administrator while the MCP server is not. Run the MCP server with the same privilege level as the target application.
+</details>
+
+## Usage
+
+### Configure Your MCP Client
+
+Add to your MCP client configuration (Claude Desktop, OPENCLAW, etc.):
+
 ```json
 {
   "mcpServers": {
     "windows-computer-use": {
       "command": "node",
-      "args": ["path/to/bundle/index.js"]
+      "args": ["path/to/windows-computer-use-mcp/bundle/index.js"]
     }
   }
 }
 ```
 
-## Usage Guide for AI Agents
+You can also run it directly for testing:
 
-### Recommended Workflow (Multimodal)
-```
-1. screenshot() → capture_region()     → See the screen / target area
-2. Visually identify target elements   → "The login button is at bottom-right"
-3. click({ x, y, processName })        → Interact
-4. screenshot() / perceive()           → Verify the result visually
-```
-
-### Cost-Optimized Workflow (Non-Vision Models)
-```
-1. perceive()                          → Understand screen state (~1k tokens)
-2. get_ui_elements({ processName })    → Get detailed UI tree (~500 tokens)
-3. click({ x, y })                     → Interact using element coordinates
-4. perceive() again                    → Confirm the result
-```
-
-### Avoiding Window Occlusion
-- **Desktop icons**: Use `get_desktop_icons()` — it auto-shows desktop
-- **App windows**: Always pass `processName` to `click()` for auto-focus before clicking
-- **Check before acting**: `perceive()` returns a `warning` field if target is obscured
-- **Force foreground**: Call `focus_app()` before interacting with a specific window
-
-## v1.1.0 — Low-Cost Perception Layer + Desktop Tools
-
-- Fixed UIA coordinate double-scaling bug (physical→logical conversion)
-- New coordinate system: global logical coordinates consistent across multi-monitor
-- Added `perceive()`, `describe_screen()`, `get_ui_elements()` — structured perception for non-vision models (~500-1k tokens vs ~50k for screenshots)
-- `perceive()` detects window occlusion and returns `warning` + `foreground` fields
-- New desktop tools: `show_desktop()`, `get_desktop_icons()`, `arrange_desktop_icons()`
-- New utility tools: `capture_region()`, `get_window_rect()`, `wait()`
-- MCP Prompts: `avoid_occlusion`, `use_desktop`, `open_app_by_desktop`
-- Tool descriptions rewritten with usage scenarios, examples, and occlusion guidance
-
-## Troubleshooting
-
-**Build fails with "napi not found"**
 ```bash
-npm install -g @napi-rs/cli
+node bundle/index.js
+# MCP server now listening on stdio
 ```
 
-**Native module fails to load**
-Ensure you ran `node build.js` and the Rust toolchain is installed. The build script compiles `native/` and bundles everything into `bundle/`.
+### Quick Start: A Complete Workflow
 
-**Screenshot returns black image**
-This can happen when running in a virtual machine or via RDP without a GPU. Try using `describe_screen` or `perceive` instead, which use UI Automation (no GPU required).
+Here is a typical session using 4 tools to accomplish a task:
 
-**UI Automation returns few elements**
-The target window may be elevated (running as Administrator) while the MCP server is not. Run the MCP server with the same privilege level as the target application.
+```
+1. perceive({ targetProcess: "notepad" })
+   → Check what's on screen, whether notepad is in foreground
+   → Returns: elements list, foreground info, occlusion warning
+
+2. focus_app({ processName: "notepad" })
+   → Bring notepad to front if it was obscured
+
+3. click({ x: 500, y: 300, processName: "notepad" })
+   → Click the text area (processName ensures notepad is frontmost first)
+
+4. type({ text: "Hello from MCP!" })
+   → Type text into the focused editor
+
+5. screenshot({})
+   → Visually confirm the result (with a vision-capable model)
+```
+
+### Two Operating Modes
+
+#### Visual Mode (with vision-capable models)
+
+When your AI model supports image inputs, you get the full "human-like" experience:
+
+- Use `screenshot` to see the entire screen
+- The model reasons about what it sees — buttons, text, images, layouts
+- Use `click`, `type`, `drag` to interact
+
+#### Structured Mode (non-vision models)
+
+When your model cannot process images, use the cost-efficient perception tools:
+
+- Use `perceive` (~1k tokens) to get a structured description of UI elements
+- Use `describe_screen` to get a text summary of what's visible
+- Use `get_ui_elements` for detailed element trees with coordinates
+
+### Preventing Misclicks (Window Occlusion)
+
+The most common failure mode in desktop automation is clicking the wrong window. The server provides three safeguards:
+
+1. **Pass `processName` to `click()`** — automatically focuses the target window before clicking
+2. **Check `perceive()` warning field** — detects if your target is obscured
+3. **Call `focus_app()` explicitly** — brings any window to the foreground
+
+```javascript
+// Safe click — always lands on the right window
+click({ x: 400, y: 200, processName: "chrome" })
+
+// Before desktop operations
+show_desktop()
+get_desktop_icons()  // auto-calls show_desktop internally
+```
+
+## Features
+
+### Visual Perception
+
+| Tool | Token Cost | Description |
+|------|-----------|-------------|
+| `screenshot` | ~50k | Full-screen JPEG capture. The AI "sees" the screen — reads text, recognizes icons, understands layouts. Use when visual confirmation is essential. Supports `exclude` parameter to hide windows before capture. |
+| `capture_region` | ~5k | Captures a specific screen region by pixel coordinates. Combine with `get_window_rect` for targeted window captures. |
+| `perceive` | ~1k | **[Recommended]** Smart screen awareness. Automatically selects the most efficient method — returns structured element data, text description, display info, foreground app, and occlusion warnings. |
+| `describe_screen` | ~1k | Human-readable text description of the current screen: foreground app, display parameters, all visible UI elements with names, types, and positions. |
+| `get_ui_elements` | ~500 | Raw UI Automation element tree. Lowest-cost perception — returns name, control type, coordinates, enabled/visible state for each element. Filter by process name. |
+
+### Mouse Input
+
+| Tool | Description |
+|------|-------------|
+| `move_mouse` | Move cursor to (x, y) logical coordinates. DPI-aware across multi-monitor setups. |
+| `click` | Click at coordinates. Supports left/right/middle buttons, double-click (`count: 2`). Optional `processName` auto-focuses the window before clicking. |
+| `drag` | Press-and-drag from start to end coordinates. Optional start (uses current position if omitted). |
+| `scroll` | Mouse wheel scroll at position (dx/dy for horizontal/vertical). |
+
+### Keyboard Input
+
+| Tool | Description |
+|------|-------------|
+| `key` | Send single keys or combinations: `"enter"`, `"ctrl+c"`, `"alt+f4"`, `"ctrl+shift+escape"`. Modifier keys are released after each call to prevent stuck keys. |
+| `type` | Type text with natural cadence into the focused input field. |
+| `write_clipboard` | Write text to the system clipboard. |
+| `read_clipboard` | Read text from the system clipboard. |
+
+### Window & Desktop Management
+
+| Tool | Description |
+|------|-------------|
+| `focus_app` | Bring a window to foreground by process name. Uses a 6-level strategy including UI Automation bypass for elevated windows. |
+| `open_app` | Launch an application (by name or path), or activate it if already running. |
+| `get_frontmost_app` | Get the name and process path of the currently active window. |
+| `get_window_rect` | Get a window's bounding rectangle (physical pixels). Useful before `capture_region`. |
+| `hide_windows` | Temporarily hide specific process windows — for clean screenshots without visual clutter. Returns handles for restoration. |
+| `unhide_windows` | Restore windows hidden by `hide_windows`. |
+| `show_desktop` | Minimize all windows (Win+D). |
+| `get_desktop_icons` | List all desktop icons with names and coordinates. Auto-shows desktop first. |
+| `arrange_desktop_icons` | Reposition desktop icons by name to specified logical coordinates. Operates directly on the SysListView32 control for instant results. |
+
+### System & Utility
+
+| Tool | Description |
+|------|-------------|
+| `get_display_size` | Monitor geometry — physical width/height, DPI scale factor. |
+| `list_installed_apps` | Enumerate all installed Windows applications. |
+| `wait` | Pause execution for a specified duration (seconds). Useful for waiting on UI animations. |
+
+## Architecture
+
+```
+AI Agent (MCP Client)
+    ↕ MCP Protocol (JSON-RPC over stdio)
+Windows Computer Use MCP Server
+    ├── TypeScript Layer (src/)
+    │   ├── index.ts       — 24 MCP tool definitions & request handlers
+    │   ├── executor.ts    — High-level API, DPI scaling, focus enforcement
+    │   ├── utils.ts       — Multi-monitor logical↔physical coordinate mapping
+    │   └── types.ts       — TypeScript interfaces
+    │
+    └── Rust Native Module (native/src/)
+        ├── capture.rs     — DXGI hardware-accelerated screen capture (full + region)
+        ├── input.rs       — Keyboard/mouse simulation via enigo
+        ├── uia.rs         — UI Automation element tree (41 control types, low-cost perception)
+        ├── window.rs      — Window management, 6-level focus strategy, desktop icon arrangement
+        └── apps.rs        — Installed application enumeration
+```
+
+### Coordinate System
+
+All tools accept and return **global logical coordinates** (DPI-aware):
+
+- UI Automation returns physical pixels → automatically converted to logical coordinates
+- Multi-monitor setups with different DPI scales are handled transparently
+- You never need to worry about DPI — just use the coordinates from perception tools
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, architecture overview, and pull request guidelines.
+We welcome contributions! Here's how to get started:
+
+1. Read [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines
+2. Check the [issues page](https://github.com/betrayzl/windows-computer-use-mcp/issues) for open work
+3. Follow [Conventional Commits](https://www.conventionalcommits.org/) for commit messages (`feat:`, `fix:`, `docs:`, etc.)
+
+### Development Quick Start
+
+```bash
+git clone https://github.com/betrayzl/windows-computer-use-mcp.git
+cd windows-computer-use-mcp
+npm install
+node build.js           # Full build
+node bundle/index.js    # Test run
+node tests/test_driver.js  # Run diagnostics
+```
+
+### Adding a New Tool
+
+1. Add the tool definition to `src/index.ts`
+2. Add the handler case in `CallToolRequestSchema`
+3. Implement the method in `src/executor.ts`
+4. Add Rust implementation in `native/src/` if low-level Windows API is needed
+5. Export the function from `native/src/lib.rs`
+6. Update this README with the new tool
 
 ## Security
 
-Deep Windows system access comes with responsibility. See [SECURITY.md](SECURITY.md) for our security policy and guidelines on safe usage.
+This server has deep Windows system access (screen capture, keyboard/mouse simulation, process management, cross-process memory). Please review [SECURITY.md](SECURITY.md) before use.
+
+- Run the server with the lowest privilege level needed for your task
+- Be cautious when automating sensitive applications (banking, admin consoles)
+- Review automation scripts before executing them unattended
+- The server operates entirely locally — no data is sent to external services
 
 ## License
 
-[MIT](LICENSE)
+This project is licensed under the MIT License — see [LICENSE](LICENSE) for the full text.
+
+---
+
+Built with [NAPI-RS](https://napi.rs/), [enigo](https://github.com/enigo-rs/enigo), and the [Model Context Protocol SDK](https://github.com/modelcontextprotocol/typescript-sdk).
