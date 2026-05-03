@@ -1,5 +1,5 @@
 {
-  "name": "windows-computer-use-mcp",
+  "name": "@betrayzl/windows-computer-use-mcp",
   "version": "1.2.0",
   "description": "Human-like Windows control for AI agents via the Model Context Protocol. Combines DXGI visual perception with simulated mouse/keyboard input. Built by a non-programmer with Claude Code.",
   "type": "module",
