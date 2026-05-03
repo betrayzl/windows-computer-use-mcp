@@ -12,16 +12,6 @@ import { execSync } from 'child_process';
 import { copyFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 
-/**
- * Windows Computer Use MCP Build Script
- *
- * Workflow:
- * 1. Compile Rust native module (napi-rs)
- * 2. Compile TypeScript (tsc)
- * 3. Bundle everything into a single file using @vercel/ncc
- * 4. Copy the .node file into the output directory
- */
-
 async function runBuild() {
   const rootDir = process.cwd();
   const bundleDir = join(rootDir, 'bundle');

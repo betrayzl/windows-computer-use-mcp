@@ -6,6 +6,8 @@ use std::os::windows::ffi::OsStringExt;
 use windows::Win32::Foundation::*;
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::System::Threading::*;
+use windows::Win32::System::Memory::*;
+use windows::Win32::System::Diagnostics::Debug::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::HSTRING;
 use windows::Win32::UI::HiDpi::*;
@@ -342,6 +344,202 @@ impl WindowManager {
             Ok(None)
         }
     }
+
+    #[napi]
+    pub fn arrange_desktop_icons(&self, positions: Vec<DesktopIconPosition>) -> Result<i32> {
+        unsafe {
+            let hwnd_lv = find_desktop_listview()
+                .ok_or_else(|| Error::from_reason("Cannot find desktop SysListView32 window. Is the desktop visible?"))?;
+
+            let count = SendMessageW(hwnd_lv, LVM_GETITEMCOUNT, None, None).0 as i32;
+            if count == 0 {
+                return Ok(0);
+            }
+
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(hwnd_lv, Some(&mut pid));
+            if pid == 0 {
+                return Err(Error::from_reason("Failed to get explorer process ID"));
+            }
+
+            let h_process = OpenProcess(
+                PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE,
+                false,
+                pid,
+            )
+            .map_err(|e| Error::from_reason(format!("OpenProcess failed: {}", e)))?;
+
+            let mut set_count = 0;
+
+            for i in 0..count {
+                if let Some(name) = get_lv_item_text(hwnd_lv, h_process, i) {
+                    for pos in &positions {
+                        if name == pos.name
+                            || name.contains(&pos.name)
+                            || pos.name.contains(&name)
+                        {
+                            let lparam = ((pos.x as u32 & 0xFFFF) | ((pos.y as u32 & 0xFFFF) << 16)) as isize;
+                            SendMessageW(
+                                hwnd_lv,
+                                LVM_SETITEMPOSITION,
+                                Some(WPARAM(i as usize)),
+                                Some(LPARAM(lparam)),
+                            );
+                            set_count += 1;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            let _ = CloseHandle(h_process);
+
+            // Invalidate the ListView to repaint icons at new positions
+            let _ = InvalidateRect(Some(hwnd_lv), None, true);
+
+            Ok(set_count)
+        }
+    }
+}
+
+#[napi(object)]
+#[derive(Clone)]
+pub struct DesktopIconPosition {
+    pub name: String,
+    pub x: i32,
+    pub y: i32,
+}
+
+// ListView message constants (from Win32_UI_Controls)
+const LVM_GETITEMCOUNT: u32 = 0x1004;
+const LVM_GETITEMTEXTW: u32 = 0x1073;
+const LVM_SETITEMPOSITION: u32 = 0x100F;
+
+// LVITEMW struct for LVM_GETITEMTEXTW
+#[repr(C)]
+#[allow(non_snake_case)]
+struct LVITEMW_Custom {
+    mask: u32,
+    iItem: i32,
+    iSubItem: i32,
+    state: u32,
+    stateMask: u32,
+    pszText: *mut u16,
+    cchTextMax: i32,
+    iImage: i32,
+    lParam: isize,
+    iIndent: i32,
+    iGroupId: i32,
+    cColumns: u32,
+    puColumns: *mut std::ffi::c_void,
+    piColFmt: *mut i32,
+    iGroup: i32,
+}
+
+/// Find the SysListView32 that hosts desktop icons.
+unsafe fn find_desktop_listview() -> Option<HWND> {
+    let desktop_hwnd = find_desktop_hwnd()?;
+    let def_view = FindWindowExW(Some(desktop_hwnd), None, windows::core::w!("SHELLDLL_DefView"), None).ok()?;
+    if def_view.0.is_null() { return None; }
+    let lv = FindWindowExW(Some(def_view), None, windows::core::w!("SysListView32"), None).ok()?;
+    if lv.0.is_null() { None } else { Some(lv) }
+}
+
+/// Get the text of a ListView item at the given index (cross-process safe).
+unsafe fn get_lv_item_text(hwnd_lv: HWND, h_process: HANDLE, index: i32) -> Option<String> {
+    let lvi_size = std::mem::size_of::<LVITEMW_Custom>();
+
+    // Allocate LVITEMW in explorer's memory
+    let p_lvi = VirtualAllocEx(
+        h_process,
+        None,
+        lvi_size,
+        MEM_COMMIT | MEM_RESERVE,
+        PAGE_READWRITE,
+    );
+    if p_lvi.is_null() {
+        return None;
+    }
+
+    // Allocate text buffer in explorer's memory
+    let buf_size: usize = 520; // 260 UTF-16 chars
+    let p_text = VirtualAllocEx(
+        h_process,
+        None,
+        buf_size,
+        MEM_COMMIT | MEM_RESERVE,
+        PAGE_READWRITE,
+    );
+    if p_text.is_null() {
+        let _ = VirtualFreeEx(h_process, p_lvi, 0, MEM_RELEASE);
+        return None;
+    }
+
+    let lvi = LVITEMW_Custom {
+        mask: 0,
+        iItem: index,
+        iSubItem: 0,
+        state: 0,
+        stateMask: 0,
+        pszText: p_text as *mut u16,
+        cchTextMax: 260,
+        iImage: 0,
+        lParam: 0,
+        iIndent: 0,
+        iGroupId: 0,
+        cColumns: 0,
+        puColumns: std::ptr::null_mut(),
+        piColFmt: std::ptr::null_mut(),
+        iGroup: 0,
+    };
+
+    // Write LVITEMW to remote process
+    let mut bytes_written: usize = 0;
+    let write_ok = WriteProcessMemory(
+        h_process,
+        p_lvi as *const std::ffi::c_void,
+        &lvi as *const _ as *const std::ffi::c_void,
+        lvi_size,
+        Some(&raw mut bytes_written),
+    )
+    .is_ok();
+
+    if !write_ok {
+        let _ = VirtualFreeEx(h_process, p_text, 0, MEM_RELEASE);
+        let _ = VirtualFreeEx(h_process, p_lvi, 0, MEM_RELEASE);
+        return None;
+    }
+
+    // Send LVM_GETITEMTEXTW
+    SendMessageW(
+        hwnd_lv,
+        LVM_GETITEMTEXTW,
+        Some(WPARAM(index as usize)),
+        Some(LPARAM(p_lvi as isize)),
+    );
+
+    // Read text back from remote process
+    let mut text_buf = vec![0u16; 260];
+    let mut bytes_read: usize = 0;
+    let read_ok = ReadProcessMemory(
+        h_process,
+        p_text as *const std::ffi::c_void,
+        text_buf.as_mut_ptr() as *mut std::ffi::c_void,
+        buf_size,
+        Some(&raw mut bytes_read),
+    )
+    .is_ok();
+
+    // Cleanup
+    let _ = VirtualFreeEx(h_process, p_text, 0, MEM_RELEASE);
+    let _ = VirtualFreeEx(h_process, p_lvi, 0, MEM_RELEASE);
+
+    if !read_ok {
+        return None;
+    }
+
+    let null_pos = text_buf.iter().position(|&c| c == 0).unwrap_or(text_buf.len());
+    Some(String::from_utf16_lossy(&text_buf[..null_pos]))
 }
 
 // ========== Alt+Tab 模拟实现 ==========

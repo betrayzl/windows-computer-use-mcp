@@ -342,6 +342,34 @@ const TOOLS: any[] = [
       required: ['duration'],
     },
   },
+  {
+    name: 'arrange_desktop_icons',
+    description: '[桌面图标布局] 将桌面图标移动到指定逻辑坐标位置。直接操作 SysListView32 控件，效率远高于逐图标拖拽。\n'
+      + '参数：positions 数组，每项包含 name（图标名称）、x、y（目标逻辑坐标）。\n'
+      + '返回：成功移动的图标数量。\n'
+      + '注意：Windows 桌面不可开启"自动排列图标"。\n'
+      + '示例：\n'
+      + '- arrange_desktop_icons({ positions: [{ name: "微信", x: 900, y: 350 }, ...] })',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        positions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: '图标名称（支持部分匹配）' },
+              x: { type: 'number', description: '目标 X 坐标（逻辑像素）' },
+              y: { type: 'number', description: '目标 Y 坐标（逻辑像素）' },
+            },
+            required: ['name', 'x', 'y'],
+          },
+          description: '图标位置列表',
+        },
+      },
+      required: ['positions'],
+    },
+  },
 ];
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -492,6 +520,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { duration } = assertArgs<{ duration: number }>(args, name);
         await executor.wait(duration);
         result = { success: true };
+        break;
+      }
+      case 'arrange_desktop_icons': {
+        const { positions } = assertArgs<{ positions: Array<{ name: string; x: number; y: number }> }>(args, name);
+        const count = await executor.arrangeDesktopIcons(positions);
+        result = { success: true, moved: count, total: positions.length };
         break;
       }
       default:

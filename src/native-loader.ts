@@ -15,17 +15,14 @@ export function requireNativeModule(): any {
   const require = createRequire(import.meta.url);
 
   const possiblePaths = [
-    // 1. 打包后与 index.js 同目录 (ncc 场景) - 优先尝试
+    // 1. Production: same directory as index.js (ncc bundle output)
     path.join(__dirname, 'win-cu-native.node'),
-    path.join(__dirname, 'win-cu-native.win32-x64-msvc.node'),
 
-    // 2. 当前工作目录 (如果用户在 bundle 目录下运行)
-    path.join(process.cwd(), 'win-cu-native.node'),
-    path.join(process.cwd(), 'win-cu-native.win32-x64-msvc.node'),
-
-    // 3. 开发环境下的相对路径 (src/ -> native/)
+    // 2. Development: src/ sibling to native/ directory
     path.join(__dirname, '..', 'native', 'win-cu-native.win32-x64-msvc.node'),
-    path.join(__dirname, '..', 'native', 'win-cu-native.node'),
+
+    // 3. CWD fallback
+    path.join(process.cwd(), 'win-cu-native.node'),
   ];
 
   console.error(`[NativeLoader] Attempting to load native module. Base __dirname: ${__dirname}`);

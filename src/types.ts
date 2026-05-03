@@ -45,6 +45,7 @@ export interface ComputerExecutor {
   captureRegion(x: number, y: number, width: number, height: number, quality: number, maxWidth: number, maxHeight: number): Promise<string>;
   getWindowRect(processName: string): Promise<WindowRect | null>;
   describeScreen(): Promise<string>;
+  arrangeDesktopIcons(positions: Array<{ name: string; x: number; y: number }>): Promise<number>;
 }
 
 export interface UiElementInfo {

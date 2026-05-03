@@ -393,4 +393,8 @@ export class WindowsComputerExecutor implements ComputerExecutor {
   async wait(duration: number): Promise<void> {
     await new Promise(r => setTimeout(r, duration * 1000));
   }
+
+  async arrangeDesktopIcons(positions: Array<{ name: string; x: number; y: number }>): Promise<number> {
+    return await this.windowManager.arrangeDesktopIcons(positions);
+  }
 }

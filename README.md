@@ -1,5 +1,10 @@
 # Windows Computer Use MCP Server
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org/)
+[![MCP](https://img.shields.io/badge/MCP-1.0-purple)](https://modelcontextprotocol.io/)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6)](https://www.microsoft.com/windows)
+
 A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides AI agents with comprehensive Windows desktop automation capabilities. Enables AI to see, understand, and interact with the Windows UI through structured data — not screenshots.
 
 ## Features
@@ -110,3 +115,31 @@ Add to your MCP client config (e.g., OPENCLAW, Claude Desktop):
 - `get_desktop_icons()` auto-shows desktop before scanning
 - Tool descriptions rewritten with usage scenarios, examples, and occlusion guidance
 - MCP Prompts: `avoid_occlusion`, `use_desktop`, `open_app_by_desktop`
+
+## Troubleshooting
+
+**Build fails with "napi not found"**
+```bash
+npm install -g @napi-rs/cli
+```
+
+**Native module fails to load**
+Ensure you ran `node build.js` and the Rust toolchain is installed. The build script compiles `native/` and bundles everything into `bundle/`.
+
+**Screenshot returns black image**
+This can happen when running in a virtual machine or via RDP without a GPU. Try using `describe_screen` or `perceive` instead, which use UI Automation (no GPU required).
+
+**UI Automation returns few elements**
+The target window may be elevated (running as Administrator) while the MCP server is not. Run the MCP server with the same privilege level as the target application.
+
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, architecture overview, and pull request guidelines.
+
+## Security
+
+Deep Windows system access comes with responsibility. See [SECURITY.md](SECURITY.md) for our security policy and guidelines on safe usage.
+
+## License
+
+[MIT](LICENSE)

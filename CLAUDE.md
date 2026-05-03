@@ -25,11 +25,12 @@ This is a Model Context Protocol (MCP) server providing Windows automation capab
   - `native-loader.ts`: Handles the logic for finding and loading the compiled `.node` binary.
   - `types.ts`: Core TypeScript interface definitions (e.g., `ComputerExecutor`, `DisplayGeometry`).
   - `utils.ts`: Helper functions for coordinate conversion (logical to physical) and DPI scaling.
-  - `gates.ts` & `lock.ts`: Logic for feature toggles and cross-instance mutual exclusion.
+  - Feature toggles and cross-instance mutual exclusion are planned but not yet implemented.
 - `native/`: Rust source code using `napi-rs` for high-performance Windows API interaction.
   - Provides core capabilities: Mouse/Keyboard simulation (`enigo`), Screen capture (`dxgi`), Window management (`windows` crate), and Clipboard access (`arboard`).
-- `dist/`: Compiled TypeScript output.
-- `bundle/`: The production-ready output containing `index.js` and the `.node` module.
+- `dist/`: Compiled TypeScript output (gitignored).
+- `bundle/`: Production-ready output (gitignored) containing `index.js` and the `.node` module.
+- `tests/`: Test scripts and regression drivers.
 
 ## Architecture
 

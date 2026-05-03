@@ -4,6 +4,9 @@ native/target/
 # TypeScript compilation output
 dist/
 
+# Production bundle output
+bundle/
+
 # Node modules
 node_modules/
 
@@ -11,6 +14,22 @@ node_modules/
 *.bak
 *.prev
 
+# Rust debug symbols and intermediate files
+*.pdb
+*.dll.exp
+*.dll.lib
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment files
+.env
+.env.*
+
 # OS files
 Thumbs.db
 .DS_Store
+desktop.ini
