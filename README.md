@@ -5,33 +5,43 @@
 [![MCP](https://img.shields.io/badge/MCP-1.0-purple)](https://modelcontextprotocol.io/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6)](https://www.microsoft.com/windows)
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides AI agents with comprehensive Windows desktop automation capabilities. Enables AI to see, understand, and interact with the Windows UI through structured data — not screenshots.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that gives AI agents human-like control over Windows. Combines **visual perception** (screenshots) with **simulated mouse and keyboard input** to operate any application exactly the way a person would — no API integration required.
+
+### Why This Matters
+
+- **Works everywhere**: Any Windows application — legacy software, virtual machines, restricted platforms — can be automated via visual perception and input simulation, even when no API or webhook exists.
+- **Reduces account ban risk**: On heavily regulated platforms, API-based automation is easily detected and flagged. Simulated human operations (real mouse movements, natural typing cadence) are far harder to distinguish from genuine users.
+- **Layered cost efficiency**: Use fast structured perception (`perceive`, `describe_screen`) for routine checks (~1k tokens), fall back to full screenshots only when visual confirmation is needed (~5-50k tokens), and call native APIs directly when available for zero-token operations.
+- **Multimodal-first design**: When paired with a vision-capable model, the AI can literally "see" the screen and reason about visual layouts, icons, images, and UI states — just like a human looking at a monitor.
 
 ## Features
 
-### Screen Perception
-- **`perceive`** — Smart screen awareness. Returns all UI elements (buttons, text, icons) as structured data with positions, types, and labels. Automatically detects window occlusion and warns when targets are obscured.
-- **`describe_screen`** — Text description of the current screen state (foreground app, display, UI elements).
-- **`get_ui_elements`** — Raw UI Automation element tree for any process window.
-- **`get_desktop_icons`** — Desktop shortcut icons with names and coordinates. Automatically shows desktop (Win+D) before scanning.
-- **`show_desktop`** — Minimize all windows to show the desktop.
+### Visual Perception (Multimodal-First)
+- **`screenshot`** — Full screen capture. When paired with a vision-capable model, the AI literally "sees" the screen — reading text, recognizing icons, understanding layouts just like a human looking at a monitor.
+- **`capture_region`** — Targeted region screenshot (~5k tokens). Capture only the window or area you need.
+- **`perceive`** — Smart screen awareness. Uses UI Automation to return structured element data (buttons, text, positions) at ~1k tokens. Automatically detects window occlusion.
+- **`describe_screen`** — Text description of current screen state. No vision model needed.
+- **`get_ui_elements`** — Raw UI Automation element tree. Lowest-cost perception (~500 tokens).
 
-### Input Simulation
-- **`click`** / **`move_mouse`** / **`drag`** / **`scroll`** — Full mouse control with optional auto-focus (brings target window to foreground before clicking).
-- **`key`** — Keyboard shortcuts (e.g., `ctrl+c`, `alt+f4`, `meta+d`).
-- **`type`** — Text input.
+### Human-Like Input Simulation
+- **`move_mouse`** / **`click`** / **`drag`** / **`scroll`** — Full mouse control with realistic movement. Optional `processName` auto-focuses the target window before interacting.
+- **`key`** — Keyboard input including combinations (`ctrl+c`, `alt+f4`, `ctrl+shift+escape`).
+- **`type`** — Text input with natural typing.
 
-### Window Management
-- **`focus_app`** — Activate and bring a window to foreground by process name. Uses 6-level strategy including UI Automation bypass for elevated windows (UIPI).
-- **`open_app`** — Launch or activate applications.
-- **`hide_windows`** / **`unhide_windows`** — Temporarily hide windows for unobstructed screenshots.
-- **`get_window_rect`** — Get window bounding rectangle for targeted region capture.
+### Window & Desktop Management
+- **`focus_app`** — Activate a window. Uses 6-level strategy including UI Automation bypass for elevated (admin) windows.
+- **`open_app`** — Launch or switch to an application.
+- **`hide_windows`** / **`unhide_windows`** — Temporarily hide windows for clean screenshots.
+- **`get_window_rect`** — Get window position and size for targeted capture.
+- **`show_desktop`** — Minimize all windows (Win+D).
+- **`get_desktop_icons`** / **`arrange_desktop_icons`** — Read and reposition desktop shortcuts.
+- **`get_frontmost_app`** — Check which window is currently in foreground.
 
-### Other
-- **`capture_region`** — Low-cost (5k tokens) region screenshot.
-- **`screenshot`** — Full screen capture (50k tokens, use sparingly).
+### System Access
 - **`list_installed_apps`** — Enumerate installed applications.
-- **`clipboard`** — Read/write system clipboard.
+- **`read_clipboard`** / **`write_clipboard`** — System clipboard access.
+- **`get_display_size`** — Monitor geometry and DPI scale factor.
+- **`wait`** — Pause for UI animations to settle.
 
 ## Architecture
 
@@ -46,11 +56,11 @@ Windows Computer Use MCP Server
     │   └── types.ts       — TypeScript interfaces
     │
     └── Rust Native Module (native/src/)
-        ├── uia.rs         — UI Automation (IUIAutomation) for element tree
-        ├── window.rs      — Window management, focus, desktop discovery
+        ├── capture.rs     — DXGI hardware-accelerated screen capture
         ├── input.rs       — Keyboard/mouse simulation via enigo
-        ├── capture.rs     — DXGI screen capture
-        └── apps.rs        — Installed app enumeration
+        ├── uia.rs         — UI Automation element tree (low-cost perception)
+        ├── window.rs      — Window management, focus, desktop icons
+        └── apps.rs        — Installed application enumeration
 ```
 
 ### Coordinate System
@@ -90,14 +100,20 @@ Add to your MCP client config (e.g., OPENCLAW, Claude Desktop):
 
 ## Usage Guide for AI Agents
 
-### Recommended Workflow
+### Recommended Workflow (Multimodal)
 ```
-1. perceive()                     → Understand current screen state
-2. perceive({ targetProcess })    → Check if target app is in foreground
-   ↳ If warning: focus_app() first
-3. get_desktop_icons()            → Get desktop shortcuts (auto-shows desktop)
-4. click({ x, y, processName }) → Click with auto-focus
-5. verify with perceive() again   → Confirm result
+1. screenshot() → capture_region()     → See the screen / target area
+2. Visually identify target elements   → "The login button is at bottom-right"
+3. click({ x, y, processName })        → Interact
+4. screenshot() / perceive()           → Verify the result visually
+```
+
+### Cost-Optimized Workflow (Non-Vision Models)
+```
+1. perceive()                          → Understand screen state (~1k tokens)
+2. get_ui_elements({ processName })    → Get detailed UI tree (~500 tokens)
+3. click({ x, y })                     → Interact using element coordinates
+4. perceive() again                    → Confirm the result
 ```
 
 ### Avoiding Window Occlusion
@@ -106,15 +122,16 @@ Add to your MCP client config (e.g., OPENCLAW, Claude Desktop):
 - **Check before acting**: `perceive()` returns a `warning` field if target is obscured
 - **Force foreground**: Call `focus_app()` before interacting with a specific window
 
-## v1.1.0 — Smart Perception & Occlusion Awareness
+## v1.1.0 — Low-Cost Perception Layer + Desktop Tools
 
 - Fixed UIA coordinate double-scaling bug (physical→logical conversion)
 - New coordinate system: global logical coordinates consistent across multi-monitor
-- `perceive()` now detects window occlusion and returns `warning` + `foreground` fields
-- New `show_desktop()` tool (Win+D)
-- `get_desktop_icons()` auto-shows desktop before scanning
-- Tool descriptions rewritten with usage scenarios, examples, and occlusion guidance
+- Added `perceive()`, `describe_screen()`, `get_ui_elements()` — structured perception for non-vision models (~500-1k tokens vs ~50k for screenshots)
+- `perceive()` detects window occlusion and returns `warning` + `foreground` fields
+- New desktop tools: `show_desktop()`, `get_desktop_icons()`, `arrange_desktop_icons()`
+- New utility tools: `capture_region()`, `get_window_rect()`, `wait()`
 - MCP Prompts: `avoid_occlusion`, `use_desktop`, `open_app_by_desktop`
+- Tool descriptions rewritten with usage scenarios, examples, and occlusion guidance
 
 ## Troubleshooting
 

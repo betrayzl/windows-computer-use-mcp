@@ -1,7 +1,7 @@
 {
   "name": "windows-computer-use-mcp",
   "version": "1.1.0",
-  "description": "Windows Computer Use MCP Server — High-performance Windows desktop automation via the Model Context Protocol. Provides screen perception, input simulation, window management, and clipboard access through a clean tool interface for AI agents.",
+  "description": "Windows Computer Use MCP Server — Human-like Windows control for AI agents via the Model Context Protocol. Combines visual perception (screenshots) with realistic mouse/keyboard simulation to operate any Windows application the way a person would, reducing API dependency and account ban risk.",
   "type": "module",
   "main": "bundle/index.js",
   "scripts": {
