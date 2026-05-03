@@ -4,6 +4,7 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org/)
 [![MCP](https://img.shields.io/badge/MCP-1.0-purple)](https://modelcontextprotocol.io/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6)](https://www.microsoft.com/windows)
+[![npm](https://img.shields.io/npm/v/@betrayzl/windows-computer-use-mcp)](https://www.npmjs.com/package/@betrayzl/windows-computer-use-mcp)
 
 A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that gives AI agents human-like control over Windows. Combines **visual perception** (screenshots) with **simulated mouse and keyboard input** to operate any application exactly the way a person would — no API integration required.
 
@@ -72,27 +73,42 @@ The current version works, but the author's vision goes further: integrating spe
 |-------------|---------|-------|
 | **Windows** | 10 or 11 | `winver` |
 | **Node.js** | ≥ 20.0.0 | `node --version` |
-| **Rust** | stable | `rustc --version` |
-| **npm** | ≥ 9.0.0 | `npm --version` |
 
-### Step 1: Clone the Repository
+### Method 1: Install from npm (Recommended)
+
+```bash
+npm install -g @betrayzl/windows-computer-use-mcp
+```
+
+This installs a **pre-built package** — no Rust compiler needed. After installation, configure your MCP client to launch:
+
+```
+node C:\Users\<你的用户名>\AppData\Roaming\npm\node_modules\@betrayzl\windows-computer-use-mcp\bundle\index.js
+```
+
+Or find the exact path with:
+
+```bash
+npm root -g
+```
+
+### Method 2: Download Pre-built Release
+
+1. Go to [Releases](https://github.com/betrayzl/windows-computer-use-mcp/releases)
+2. Download the latest `windows-computer-use-mcp-v*.zip`
+3. Extract anywhere
+4. Double-click `start.bat`, or run `node bundle/index.js`
+
+No Rust compiler required.
+
+### Method 3: Build from Source
+
+Requires **Rust** stable toolchain in addition to Node.js.
 
 ```bash
 git clone https://github.com/betrayzl/windows-computer-use-mcp.git
 cd windows-computer-use-mcp
-```
-
-### Step 2: Install Dependencies
-
-```bash
 npm install
-```
-
-This installs the MCP SDK (`@modelcontextprotocol/sdk`), TypeScript compiler, and the `@vercel/ncc` bundler used to produce a single-file distribution.
-
-### Step 3: Build
-
-```bash
 node build.js
 ```
 
