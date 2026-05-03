@@ -14,8 +14,48 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that g
 - **Layered cost efficiency**: Use fast structured perception (`perceive`, `describe_screen`) for routine checks (~1k tokens), fall back to full screenshots only when visual confirmation is needed (~5-50k tokens), and call native APIs directly when available for zero-token operations.
 - **Multimodal-first design**: When paired with a vision-capable model, the AI can literally "see" the screen and reason about visual layouts, icons, images, and UI states — just like a human looking at a monitor.
 
+## Project Story
+
+This project was built by someone who **doesn't know how to code**.
+
+The author is a Genshin Impact player who wanted AI to help with repetitive in-game tasks — farming, map clearing, daily commissions. The goal was simple: let AI see the screen and operate the game just like a human would, reducing the grind without risking account bans from API-based automation.
+
+### Built with a $300 GPU and a Local Model
+
+The entire project was developed using **Claude Code + a local Gemma 4 26B Q4 quantized model** running on a single **RTX 5060 Ti 16G** — the best hardware the author could access. No cloud compute, no engineering team, no prior programming experience.
+
+The author estimated cloud API costs would be too expensive for the volume of iteration needed, so everything was done locally. The tradeoff: a small local model that frequently made mistakes, wrote broken code, and struggled to maintain context across restarts.
+
+### The "AI Error Corrector" Workflow
+
+Despite not understanding code syntax, the author discovered a workflow that made development possible:
+
+1. **Maintain a clear logical chain** — know exactly what the project is supposed to do, step by step
+2. **When the AI gets stuck** — identify *where* the problem is, even without knowing *how* to fix it in code
+3. **Point the AI at the problem** — describe what went wrong and what the expected behavior should be
+4. **The AI self-corrects** — with clear guidance, even a small model can break out of dead ends
+
+> "I don't understand code, but I know my project's logic inside and out. When something breaks, I know exactly where to look. I became an AI error corrector — the AI writes, I review, the AI fixes. That loop works even if you've never written a line of code."
+
+### One Month from Zero to Open Source
+
+From the first `npm install` to this release: **about one month**. The author learned what Node.js is, what Rust does, how MCP works, and what "compilation" means — all through conversations with Claude Code. Every concept in this project was explained by AI to someone hearing it for the first time.
+
+The author notes that using a cloud model (like the Claude Opus powering this session) would have made development significantly easier — faster iteration, fewer mistakes, better code generation. But the constraint of a small local model forced a deep understanding of the project's logic, which turned out to be the real skill that made this possible.
+
+### What's Next
+
+The current version works, but the author's vision goes further: integrating specialized **Agents** and purpose-built models to handle complex multi-step tasks with better reliability. The end goal is an AI that can truly play games alongside humans — not as a bot, but as a collaborative agent that sees and operates the screen like a person.
+
+---
+
+**Key takeaway**: You don't need to be a programmer to build software with AI. You need clear thinking, a logical chain, and the willingness to be the AI's "error corrector."
+
+---
+
 ## Table of Contents
 
+- [Project Story](#project-story)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Features](#features)
